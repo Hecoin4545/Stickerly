@@ -22,11 +22,12 @@ import {
   FastForward,
   Copy,
   Users,
-  Image as ImageIcon,
   Check,
   X,
   Shuffle,
-  Info
+  Info,
+  Download,
+  Maximize2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -41,7 +42,7 @@ export default function RoomPage() {
   const { user } = useAuth();
   const { currentRoom, fetchRoom, members } = useRoom();
 
-  const [activeTab, setActiveTab] = useState('daily-drop'); // 'daily-drop' | 'studio' | 'voting' | 'leaderboard'
+  const [activeTab, setActiveTab] = useState('daily-drop'); // 'daily-drop' | 'voting' | 'leaderboard'
   const [leaderboardSubTab, setLeaderboardSubTab] = useState('standings'); // 'standings' | 'hall-of-fame' | 'roster'
   const [round, setRound] = useState(null);
   const [stickers, setStickers] = useState([]);
@@ -55,13 +56,46 @@ export default function RoomPage() {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadPreview, setUploadPreview] = useState(null);
   const [stickerTitle, setStickerTitle] = useState('');
-  const [stickerBorder, setStickerBorder] = useState(8);
-  const [stickerStyle, setStickerStyle] = useState('vinyl'); // 'vinyl' | 'matte' | 'holo'
   const fileInputRef = useRef(null);
 
   // Voting ballot state: { 1: stickerId, 2: stickerId, 3: stickerId }
   const [ballot, setBallot] = useState({ 1: null, 2: null, 3: null });
   const [hasVoted, setHasVoted] = useState(false);
+  const [fullscreenSticker, setFullscreenSticker] = useState(null);
+
+  // Close fullscreen sticker on Escape
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setFullscreenSticker(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Download sticker helper
+  const handleDownload = async (url, filename) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename || 'sticker.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success('Download started! 💾');
+    } catch {
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.download = filename || 'sticker.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   // Dropdowns
   const [showRoomMenu, setShowRoomMenu] = useState(false);
@@ -154,8 +188,9 @@ export default function RoomPage() {
   useSocket({
     roomId,
     onPhaseChange: () => {
-      toast.success('Round phase updated!');
+      toast.success('Everyone has submitted! Voting Arena is now live 🗳️');
       loadRound();
+      setActiveTab('voting');
     },
     onSubmissionUpdate: () => {
       loadRound();
@@ -238,7 +273,12 @@ export default function RoomPage() {
       const res = await api.post('/stickers/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      toast.success('Sticker uploaded! 🎯 Waiting for 10 PM reveal.');
+      if (res.data?.roundStatus === 'voting') {
+        toast.success('All stickers uploaded! 🗳️ Voting session is now live!');
+        setActiveTab('voting');
+      } else {
+        toast.success('Sticker uploaded! 🎯 Waiting for all hunters to submit.');
+      }
       setMySticker(res.data);
       setUploadFile(null);
       setUploadPreview(null);
@@ -250,6 +290,22 @@ export default function RoomPage() {
       setActionLoading(false);
     }
   };
+
+  // Ballot & Votable Stickers calculations
+  const isSoloRoom = (members?.length || currentRoom?.members?.length || 0) <= 1;
+  const votableStickers = stickers.filter((s) => {
+    if (isSoloRoom) return true;
+    const cid = s.creatorId?._id || s.creatorId;
+    return cid !== user?._id;
+  });
+  const maxPlaces = Math.min(3, Math.max(1, votableStickers.length));
+
+  const isBallotValid =
+    maxPlaces === 1
+      ? Boolean(ballot[1])
+      : maxPlaces === 2
+      ? Boolean(ballot[1] && ballot[2])
+      : Boolean(ballot[1] && ballot[2] && ballot[3]);
 
   // Assign Sticker to Ballot
   const assignBallot = (rank, stickerId) => {
@@ -267,18 +323,24 @@ export default function RoomPage() {
   };
 
   const handleVoteSubmit = async () => {
-    if (!ballot[1] || !ballot[2] || !ballot[3]) {
-      toast.error('Please select your 1st, 2nd, and 3rd place stickers!');
+    if (!isBallotValid) {
+      if (maxPlaces === 1) {
+        toast.error('Please assign 1st place to submit your ballot!');
+      } else if (maxPlaces === 2) {
+        toast.error('Please assign 1st and 2nd place to submit your ballot!');
+      } else {
+        toast.error('Please select your 1st, 2nd, and 3rd place stickers!');
+      }
       return;
     }
-    const formatted = [
-      { stickerId: ballot[1], rank: 1 },
-      { stickerId: ballot[2], rank: 2 },
-      { stickerId: ballot[3], rank: 3 },
-    ];
+    const formatted = [];
+    if (ballot[1]) formatted.push({ stickerId: ballot[1], rank: 1 });
+    if (ballot[2] && maxPlaces >= 2) formatted.push({ stickerId: ballot[2], rank: 2 });
+    if (ballot[3] && maxPlaces >= 3) formatted.push({ stickerId: ballot[3], rank: 3 });
+
     try {
       setActionLoading(true);
-      await api.post('/api/votes/submit', {
+      await api.post('/votes/submit', {
         roundId: round._id,
         roomId,
         ballot: formatted,
@@ -395,7 +457,7 @@ export default function RoomPage() {
         </div>
       </header>
 
-      {/* 4 PRIMARY NAVIGATION TABS */}
+      {/* PRIMARY NAVIGATION TABS */}
       <div className="bg-white border-b border-gray-200 px-4 md:px-8">
         <div className="flex items-center gap-2 md:gap-4 overflow-x-auto py-2">
           <button
@@ -407,17 +469,6 @@ export default function RoomPage() {
             }`}
           >
             Daily Drop
-          </button>
-
-          <button
-            onClick={() => setActiveTab('studio')}
-            className={`px-4 py-2 text-xs md:text-sm font-bold tracking-tight rounded-lg border border-dashed transition-all ${
-              activeTab === 'studio'
-                ? 'bg-black text-white border-black shadow-sm'
-                : 'text-gray-500 border-gray-300 hover:text-black hover:border-gray-400'
-            }`}
-          >
-            Sticker Studio
           </button>
 
           <button
@@ -447,9 +498,9 @@ export default function RoomPage() {
             Leaderboard & Hall of Fame
           </button>
 
-          {/* Admin Tools for Demoing & Testing */}
+          {/* Header Controls */}
           <div className="ml-auto flex items-center gap-2 pl-4">
-            {!round ? (
+            {!round && (
               <button
                 onClick={handleStartRound}
                 disabled={actionLoading}
@@ -457,39 +508,15 @@ export default function RoomPage() {
               >
                 <Play className="w-3.5 h-3.5" /> Start Round #1
               </button>
-            ) : (
-              <button
-                onClick={handleAdvanceRound}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs font-bold hover:bg-black transition"
-                title="Advance phase: Hunt -> Voting -> Completed"
-              >
-                <FastForward className="w-3.5 h-3.5" /> Next Phase ({round.status})
-              </button>
             )}
+            <button
+              onClick={loadData}
+              className="p-1.5 text-gray-400 hover:text-black rounded-lg hover:bg-gray-100 transition"
+              title="Refresh Room"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
           </div>
-        </div>
-      </div>
-
-      {/* ROUND NOTICE SUB-BAR */}
-      <div className="bg-[#FFF4E5] border-b border-[#FFE0B2] px-4 md:px-8 py-2 flex flex-wrap items-center justify-between text-xs text-[#8A5300] font-medium">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-          <span className="font-bold">SEASON 01 • THE MIDNIGHT HUNT</span>
-          <span>•</span>
-          <span>Room #{currentRoom?.code} Active</span>
-          {round?.theme && (
-            <>
-              <span>•</span>
-              <span className="font-semibold text-black">Mandatory Theme: "{round.theme}"</span>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <span>⚡ Double XP for stickers uploaded before 18:00</span>
-          <button onClick={loadData} className="hover:text-black">
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
 
@@ -519,6 +546,30 @@ export default function RoomPage() {
               </div>
             ) : (
               <>
+                {round.status === 'voting' && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-lg animate-pulse flex-shrink-0">
+                        🗳️
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-amber-950">
+                          Voting Phase is Live!
+                        </h4>
+                        <p className="text-xs text-amber-800">
+                          Everyone (except target @{round.targetUserId?.username}) has submitted their sticker. Deliberation is open!
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('voting')}
+                      className="px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition shadow-sm flex-shrink-0"
+                    >
+                      Enter Voting Arena →
+                    </button>
+                  </div>
+                )}
+
                 {/* 2-COLUMN GRID (Top cards) */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* LEFT COLUMN (~60%): Target Card + Theme */}
@@ -696,21 +747,13 @@ export default function RoomPage() {
                                 className="w-full px-4 py-2 text-xs rounded-xl border border-gray-300 focus:outline-none focus:border-black"
                               />
 
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={handleUploadSubmit}
-                                  disabled={actionLoading}
-                                  className="flex-1 py-2.5 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition"
-                                >
-                                  {actionLoading ? 'Uploading...' : 'Submit & Slap To Vault'}
-                                </button>
-                                <button
-                                  onClick={() => setActiveTab('studio')}
-                                  className="px-4 py-2.5 bg-gray-100 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-200 transition"
-                                >
-                                  Open Studio
-                                </button>
-                              </div>
+                              <button
+                                onClick={handleUploadSubmit}
+                                disabled={actionLoading}
+                                className="w-full py-2.5 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition"
+                              >
+                                {actionLoading ? 'Uploading...' : 'Submit & Slap To Vault'}
+                              </button>
                             </div>
                           )}
                         </div>
@@ -906,121 +949,7 @@ export default function RoomPage() {
         )}
 
         {/* ======================================================== */}
-        {/* TAB 2: STICKER STUDIO */}
-        {/* ======================================================== */}
-        {activeTab === 'studio' && (
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-6">
-                <div>
-                  <h3 className="text-lg font-black tracking-tight">Sticker Die-Cut Studio</h3>
-                  <p className="text-xs text-gray-500">
-                    Adjust border thickness, finish style, and preview physical vinyl peel before slapping.
-                  </p>
-                </div>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 bg-gray-100 text-xs font-bold rounded-lg hover:bg-gray-200"
-                >
-                  Choose Image
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                {/* Visual Preview with white die-cut border */}
-                <div className="bg-[#EFEFEF] rounded-2xl p-8 flex items-center justify-center min-h-[300px] relative overflow-hidden border border-gray-200">
-                  <div
-                    className="relative transition-all duration-300"
-                    style={{
-                      filter:
-                        stickerStyle === 'holo'
-                          ? 'drop-shadow(0 8px 16px rgba(232, 67, 147, 0.4))'
-                          : 'drop-shadow(0 10px 15px rgba(0, 0, 0, 0.15))',
-                    }}
-                  >
-                    {uploadPreview || mySticker?.imageUrl ? (
-                      <div
-                        className="relative bg-white rounded-2xl overflow-hidden"
-                        style={{ padding: `${stickerBorder}px` }}
-                      >
-                        <img
-                          src={uploadPreview || mySticker?.imageUrl}
-                          alt="Sticker Die-cut"
-                          className="max-h-56 object-contain rounded-xl"
-                        />
-                        {stickerStyle === 'holo' && (
-                          <div className="absolute inset-0 bg-gradient-to-tr from-pink-500/20 via-transparent to-cyan-500/20 pointer-events-none" />
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center p-8 bg-white/60 rounded-2xl border border-dashed border-gray-300">
-                        <ImageIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                        <span className="text-xs font-bold text-gray-500">No image loaded yet</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <div className="space-y-5">
-                  <div>
-                    <label className="text-xs font-bold text-gray-700 block mb-2">
-                      Die-cut White Border Thickness: {stickerBorder}px
-                    </label>
-                    <input
-                      type="range"
-                      min="2"
-                      max="20"
-                      value={stickerBorder}
-                      onChange={(e) => setStickerBorder(Number(e.target.value))}
-                      className="w-full accent-black cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-gray-700 block mb-2">
-                      Finish Texture Preset
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: 'vinyl', label: 'Vinyl Gloss' },
-                        { id: 'matte', label: 'Matte Paper' },
-                        { id: 'holo', label: 'Holo Trim v1' },
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => setStickerStyle(item.id)}
-                          className={`py-2 px-3 text-xs font-bold rounded-xl border text-center transition ${
-                            stickerStyle === item.id
-                              ? 'bg-black text-white border-black'
-                              : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-100">
-                    <button
-                      onClick={() => {
-                        toast.success('Style applied to your sticker!');
-                        setActiveTab('daily-drop');
-                      }}
-                      className="w-full py-2.5 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition"
-                    >
-                      Apply & Continue
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ======================================================== */}
-        {/* TAB 3: 10 PM VOTING ARENA */}
+        {/* TAB 2: 10 PM VOTING ARENA */}
         {/* ======================================================== */}
         {activeTab === 'voting' && (
           <div className="space-y-6">
@@ -1029,14 +958,8 @@ export default function RoomPage() {
                 <Clock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
                 <h3 className="text-xl font-bold mb-1">Voting Arena Locked</h3>
                 <p className="text-gray-500 text-sm mb-4">
-                  The voting arena opens promptly at 10:00 PM once the 22-hour hunt window closes.
+                  The voting arena will open immediately once everyone has submitted a sticker (except today's target @{round?.targetUserId?.username}). Otherwise, it opens at 10:00 PM as regular.
                 </p>
-                <button
-                  onClick={handleAdvanceRound}
-                  className="px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition"
-                >
-                  ⚡ Open Arena Now (Demo Advance)
-                </button>
               </div>
             ) : (
               <div className="space-y-6">
@@ -1048,7 +971,7 @@ export default function RoomPage() {
                     </span>
                     <h2 className="text-2xl font-black tracking-tight">10:00 PM Voting Arena</h2>
                     <p className="text-xs text-gray-500 mt-1">
-                      Rank your Top 3 favorite stickers of {round.targetUserId?.username} today. 🥇 1st = 5 pts • 🥈 2nd = 3 pts • 🥉 3rd = 1 pt
+                      Rank your favorite stickers of {round.targetUserId?.username} today. 🥇 1st = 5 pts • 🥈 2nd = 3 pts • 🥉 3rd = 1 pt
                     </p>
                   </div>
 
@@ -1072,74 +995,86 @@ export default function RoomPage() {
                     <div className="flex items-center justify-between">
                       <h3 className="text-base font-black tracking-tight">Your Official Ballot</h3>
                       <span className="text-xs font-bold text-gray-500">
-                        {Object.values(ballot).filter(Boolean).length} of 3 Placed
+                        {Object.values(ballot).filter(Boolean).length} of {maxPlaces} Placed
                       </span>
                     </div>
 
-                    {/* 3 Ballot Slots */}
+                    {/* Ballot Slots based on available candidates */}
                     {[
                       { rank: 1, title: '1st Place', points: '+5 Points', medal: '🥇' },
                       { rank: 2, title: '2nd Place', points: '+3 Points', medal: '🥈' },
                       { rank: 3, title: '3rd Place', points: '+1 Point', medal: '🥉' },
-                    ].map((slot) => {
-                      const assignedId = ballot[slot.rank];
-                      const assignedSticker = stickers.find((s) => s._id === assignedId);
+                    ]
+                      .filter((slot) => slot.rank <= maxPlaces)
+                      .map((slot) => {
+                        const assignedId = ballot[slot.rank];
+                        const assignedSticker = stickers.find((s) => s._id === assignedId);
 
-                      return (
-                        <div
-                          key={slot.rank}
-                          className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold flex items-center gap-1.5">
-                              <span>{slot.medal}</span>
-                              <span>{slot.title}</span>
-                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">
-                                {slot.points}
+                        return (
+                          <div
+                            key={slot.rank}
+                            className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-bold flex items-center gap-1.5">
+                                <span>{slot.medal}</span>
+                                <span>{slot.title}</span>
+                                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">
+                                  {slot.points}
+                                </span>
                               </span>
-                            </span>
-                            {assignedSticker && (
-                              <button
-                                onClick={() => removeBallotRank(slot.rank)}
-                                className="text-gray-400 hover:text-rose-500 p-1"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                              {assignedSticker && (
+                                <button
+                                  onClick={() => removeBallotRank(slot.rank)}
+                                  className="text-gray-400 hover:text-rose-500 p-1"
+                                  title="Remove selection"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+
+                            {assignedSticker ? (
+                              <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                <div
+                                  onClick={() => setFullscreenSticker(assignedSticker)}
+                                  className="relative cursor-pointer group flex-shrink-0"
+                                  title="Click to view full screen & download"
+                                >
+                                  <img
+                                    src={assignedSticker.imageUrl}
+                                    alt="Pick"
+                                    className="w-16 h-16 object-contain rounded-lg bg-white border p-1 group-hover:opacity-85 transition"
+                                  />
+                                  <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition">
+                                    <Maximize2 className="w-4 h-4 text-white drop-shadow" />
+                                  </div>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-[10px] font-mono text-gray-400">
+                                    STK-{assignedSticker._id?.slice(-4)}
+                                  </span>
+                                  <h4 className="text-sm font-bold text-gray-900 truncate">
+                                    "{assignedSticker.title || 'Untitled Candidate'}"
+                                  </h4>
+                                  <span className="text-xs text-gray-500">
+                                    {round.status === 'completed'
+                                      ? `by @${assignedSticker.creatorId?.username || 'Hunter'}`
+                                      : 'by @anonymous-lens'}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="border border-dashed border-gray-300 rounded-xl p-6 text-center text-xs text-gray-400 bg-gray-50/50">
+                                Drop your {slot.title} pick here
+                                <p className="text-[11px] text-gray-400 mt-0.5">
+                                  Click "Assign #{slot.rank}" or view sticker image from tray
+                                </p>
+                              </div>
                             )}
                           </div>
-
-                          {assignedSticker ? (
-                            <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-200">
-                              <img
-                                src={assignedSticker.imageUrl}
-                                alt="Pick"
-                                className="w-16 h-16 object-contain rounded-lg bg-white border p-1"
-                              />
-                              <div>
-                                <span className="text-[10px] font-mono text-gray-400">
-                                  STK-{assignedSticker._id?.slice(-4)}
-                                </span>
-                                <h4 className="text-sm font-bold text-gray-900">
-                                  "{assignedSticker.title || 'Untitled Candidate'}"
-                                </h4>
-                                <span className="text-xs text-gray-500">
-                                  {round.status === 'completed'
-                                    ? `by @${assignedSticker.creatorId?.username || 'Hunter'}`
-                                    : 'by @anonymous-lens'}
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="border border-dashed border-gray-300 rounded-xl p-6 text-center text-xs text-gray-400 bg-gray-50/50">
-                              Drop your {slot.title} pick here
-                              <p className="text-[11px] text-gray-400 mt-0.5">
-                                Click "Assign #{slot.rank}" on any sticker from the tray on the right
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
 
                     {/* Bottom Submit Ballot Bar */}
                     <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between shadow-sm">
@@ -1155,12 +1090,12 @@ export default function RoomPage() {
                       <button
                         onClick={handleVoteSubmit}
                         disabled={
-                          !ballot[1] || !ballot[2] || !ballot[3] || actionLoading || hasVoted
+                          !isBallotValid || actionLoading || hasVoted
                         }
                         className={`px-6 py-2 rounded-xl text-xs font-bold transition ${
                           hasVoted
                             ? 'bg-emerald-600 text-white'
-                            : ballot[1] && ballot[2] && ballot[3]
+                            : isBallotValid
                             ? 'bg-black text-white hover:bg-gray-800'
                             : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                         }`}
@@ -1191,24 +1126,33 @@ export default function RoomPage() {
                             (r) => ballot[r] === sticker._id
                           );
 
-                          // Find next unassigned rank
-                          const nextRank = [1, 2, 3].find((r) => !ballot[r]);
+                          // Find next unassigned rank within maxPlaces
+                          const nextRank = [1, 2, 3].slice(0, maxPlaces).find((r) => !ballot[r]);
 
                           return (
                             <div
                               key={sticker._id}
                               className={`bg-white rounded-2xl border p-4 shadow-sm flex items-center justify-between gap-4 ${
-                                isOwnSticker ? 'border-dashed border-gray-300 opacity-60' : 'border-gray-200'
+                                isOwnSticker && !isSoloRoom ? 'border-dashed border-gray-300 opacity-60' : 'border-gray-200'
                               }`}
                             >
-                              <div className="flex items-center gap-3">
-                                <img
-                                  src={sticker.imageUrl}
-                                  alt="Candidate"
-                                  className="w-16 h-16 object-contain rounded-lg bg-gray-50 border p-1"
-                                />
-                                <div>
-                                  <h4 className="text-xs font-bold text-gray-900">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div
+                                  onClick={() => setFullscreenSticker(sticker)}
+                                  className="relative cursor-pointer group flex-shrink-0"
+                                  title="Click to view full screen & download"
+                                >
+                                  <img
+                                    src={sticker.imageUrl}
+                                    alt="Candidate"
+                                    className="w-16 h-16 object-contain rounded-lg bg-gray-50 border p-1 group-hover:opacity-85 transition"
+                                  />
+                                  <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition">
+                                    <Maximize2 className="w-4 h-4 text-white drop-shadow" />
+                                  </div>
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-xs font-bold text-gray-900 truncate">
                                     "{sticker.title || 'Untitled'}"
                                   </h4>
                                   <span className="text-[11px] text-gray-400 block">
@@ -1224,15 +1168,21 @@ export default function RoomPage() {
                                 </div>
                               </div>
 
-                              <div>
-                                {isOwnSticker ? (
+                              <div className="flex-shrink-0">
+                                {isOwnSticker && !isSoloRoom ? (
                                   <span className="text-[11px] font-bold text-gray-400 italic">
                                     Your Sticker (Locked)
                                   </span>
                                 ) : assignedRank ? (
-                                  <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-1">
-                                    <Check className="w-3 h-3" /> Assigned #{assignedRank}
-                                  </span>
+                                  <button
+                                    onClick={() => removeBallotRank(assignedRank)}
+                                    className="px-3 py-1 bg-emerald-100 hover:bg-rose-100 text-emerald-800 hover:text-rose-700 text-xs font-bold rounded-lg flex items-center gap-1 transition group"
+                                    title="Click to unassign"
+                                  >
+                                    <Check className="w-3 h-3 group-hover:hidden" />
+                                    <X className="w-3 h-3 hidden group-hover:inline" />
+                                    <span>Assigned #{assignedRank}</span>
+                                  </button>
                                 ) : nextRank ? (
                                   <button
                                     onClick={() => assignBallot(nextRank, sticker._id)}
@@ -1257,7 +1207,7 @@ export default function RoomPage() {
         )}
 
         {/* ======================================================== */}
-        {/* TAB 4: LEADERBOARD & HALL OF FAME */}
+        {/* TAB 3: LEADERBOARD & HALL OF FAME */}
         {/* ======================================================== */}
         {activeTab === 'leaderboard' && (
           <div className="space-y-6">
@@ -1506,6 +1456,135 @@ export default function RoomPage() {
         <span>•</span>
         <span>Daily Drop resets at 12:00 AM</span>
       </footer>
+
+      {/* FULLSCREEN STICKER MODAL */}
+      <AnimatePresence>
+        {fullscreenSticker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 md:p-8"
+            onClick={() => setFullscreenSticker(null)}
+          >
+            {/* Modal Header */}
+            <div
+              className="flex items-center justify-between w-full max-w-5xl mx-auto z-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-white min-w-0 pr-4">
+                <h3 className="text-lg md:text-xl font-black tracking-tight truncate">
+                  "{fullscreenSticker.title || 'Untitled Sticker'}"
+                </h3>
+                <span className="text-xs text-gray-400">
+                  {round?.status === 'completed'
+                    ? `Uploaded by @${fullscreenSticker.creatorId?.username || 'Hunter'}`
+                    : 'Uploaded by @anonymous-hunter'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <button
+                  onClick={() =>
+                    handleDownload(
+                      fullscreenSticker.imageUrl,
+                      `${fullscreenSticker.title ? fullscreenSticker.title.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'sticker'}-${fullscreenSticker._id?.slice(-4)}.png`
+                    )
+                  }
+                  className="flex items-center gap-1.5 px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                  title="Download Sticker"
+                >
+                  <Download className="w-4 h-4" /> Download
+                </button>
+                <button
+                  onClick={() => setFullscreenSticker(null)}
+                  className="w-9 h-9 rounded-xl bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition"
+                  title="Close (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Image Display */}
+            <div
+              className="flex-1 flex items-center justify-center py-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={fullscreenSticker.imageUrl}
+                alt={fullscreenSticker.title || 'Sticker'}
+                className="max-h-[62vh] max-w-[88vw] object-contain rounded-2xl drop-shadow-[0_20px_50px_rgba(0,0,0,0.7)] border-2 border-white/10 p-2 bg-white/5"
+              />
+            </div>
+
+            {/* Modal Voting Assignment Controls */}
+            <div
+              className="w-full max-w-2xl mx-auto bg-gray-950/95 border border-white/15 rounded-2xl p-4 text-white shadow-2xl backdrop-blur-md z-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="text-center sm:text-left">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                    Assign Rank on Ballot
+                  </div>
+                  <div className="text-xs text-gray-300">
+                    {hasVoted
+                      ? 'Ballot confirmed & locked'
+                      : mySticker?._id === fullscreenSticker._id && !isSoloRoom
+                      ? 'Self-voting blocked'
+                      : 'Assign or remove this sticker from your top places'}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap justify-center">
+                  {hasVoted ? (
+                    <span className="text-xs text-emerald-400 font-bold bg-emerald-950/60 px-3 py-1.5 rounded-lg border border-emerald-800 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Ballot Submitted
+                    </span>
+                  ) : mySticker?._id === fullscreenSticker._id && !isSoloRoom ? (
+                    <span className="text-xs text-gray-400 font-bold bg-gray-800 px-3 py-1.5 rounded-lg">
+                      Own Sticker (Locked)
+                    </span>
+                  ) : (
+                    [
+                      { rank: 1, label: 'Assign #1 🥇', medal: '🥇' },
+                      { rank: 2, label: 'Assign #2 🥈', medal: '🥈' },
+                      { rank: 3, label: 'Assign #3 🥉', medal: '🥉' },
+                    ]
+                      .filter((slot) => slot.rank <= maxPlaces)
+                      .map((slot) => {
+                        const isAssignedHere = ballot[slot.rank] === fullscreenSticker._id;
+                        return (
+                          <button
+                            key={slot.rank}
+                            onClick={() => {
+                              if (isAssignedHere) {
+                                removeBallotRank(slot.rank);
+                                toast.success(`Removed from #${slot.rank}`);
+                              } else {
+                                assignBallot(slot.rank, fullscreenSticker._id);
+                                toast.success(`Assigned as #${slot.rank} pick!`);
+                              }
+                            }}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                              isAssignedHere
+                                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-300'
+                                : 'bg-white/10 text-white hover:bg-white/20'
+                            }`}
+                          >
+                            {isAssignedHere ? <Check className="w-3.5 h-3.5" /> : null}
+                            {isAssignedHere ? `✓ Ranked #${slot.rank}` : slot.label}
+                          </button>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
