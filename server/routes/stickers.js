@@ -33,7 +33,7 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
     const isMember = room.members.some((m) => m.toString() === req.user._id.toString());
     if (!isMember) return res.status(403).json({ message: 'Not a member of this room' });
 
-    if (round.targetUserId.toString() === req.user._id.toString()) {
+    if (room.members.length > 1 && round.targetUserId.toString() === req.user._id.toString()) {
       return res.status(403).json({ message: 'Target cannot upload stickers' });
     }
 
@@ -41,9 +41,6 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
     if (existing) return res.status(409).json({ message: 'Already uploaded a sticker this round' });
 
     if (!req.file) return res.status(400).json({ message: 'Image file required' });
-
-    const uploadHour = new Date().getHours();
-    const isEarlyBird = uploadHour < 18;
 
     // Handle Cloudinary vs Local Storage URL
     let imageUrl = req.file.path;
@@ -60,14 +57,49 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
       imageUrl,
       publicId,
       title: req.body.title || '',
-      isEarlyBird,
+      isEarlyBird: false,
     });
 
     await Round.findByIdAndUpdate(round._id, { $inc: { submissionCount: 1 } });
 
+    // Check if everyone has submitted a sticker except the target user ("the one whose name is written")
+    const targetIdStr = round.targetUserId.toString();
+    const eligibleMembers = [
+      ...new Set(
+        room.members
+          .map((m) => m.toString())
+          .filter((id) => (room.members.length > 1 ? id !== targetIdStr : true))
+      ),
+    ];
+
+    const allStickers = await Sticker.find({ roundId: round._id });
+    const uploaderIds = new Set(allStickers.map((s) => s.creatorId.toString()));
+
+    const allUploaded =
+      eligibleMembers.length > 0 &&
+      eligibleMembers.every((m) => uploaderIds.has(m));
+
+    let roundStatus = round.status;
+    if (allUploaded) {
+      round.status = 'voting';
+      round.votingStart = new Date();
+      await round.save();
+      roundStatus = 'voting';
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(roomId).emit('phase-change', { phase: 'voting' });
+      }
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(roomId).emit('submission-update', { submittedCount: allStickers.length });
+    }
+
     const stickerObj = sticker.toObject();
     delete stickerObj.creatorId;
-    res.status(201).json(stickerObj);
+    res.status(201).json({ ...stickerObj, roundStatus });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

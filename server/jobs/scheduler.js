@@ -155,8 +155,7 @@ cron.schedule('59 23 * * *', async () => {
         const isEarlyBird = sticker.isEarlyBird;
 
         const submissionBonus = 2;
-        const earlyBirdBonus = isEarlyBird ? 1 : 0;
-        const pointsAwarded = total + submissionBonus + earlyBirdBonus;
+        const pointsAwarded = total + submissionBonus;
 
         await Sticker.findByIdAndUpdate(sticker._id, {
           firstPlaceVotes: first,

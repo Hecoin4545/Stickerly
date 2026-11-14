@@ -27,6 +27,32 @@ router.get('/:roomId/current', auth, async (req, res) => {
     );
     if (!round) return res.status(404).json({ message: 'Round not found' });
 
+    if (round.status === 'hunt') {
+      const targetIdStr = round.targetUserId?._id
+        ? round.targetUserId._id.toString()
+        : round.targetUserId.toString();
+      const eligibleMembers = [
+        ...new Set(
+          room.members
+            .map((m) => m.toString())
+            .filter((id) => (room.members.length > 1 ? id !== targetIdStr : true))
+        ),
+      ];
+      const stickers = await Sticker.find({ roundId: round._id });
+      const uploaderIds = new Set(stickers.map((s) => s.creatorId.toString()));
+      const allUploaded =
+        eligibleMembers.length > 0 &&
+        eligibleMembers.every((m) => uploaderIds.has(m));
+
+      const isPast10PM = round.huntDeadline && new Date() >= new Date(round.huntDeadline);
+
+      if (allUploaded || isPast10PM) {
+        round.status = 'voting';
+        round.votingStart = new Date();
+        await round.save();
+      }
+    }
+
     res.json(round);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -176,7 +202,7 @@ router.post('/:roomId/advance', auth, async (req, res) => {
       for (let i = 0; i < sortedStickers.length; i++) {
         const { sticker, first, second, third, total } = sortedStickers[i];
         const finalRank = i + 1;
-        const totalAwarded = total + 2 + (sticker.isEarlyBird ? 1 : 0);
+        const totalAwarded = total + 2;
 
         await Sticker.findByIdAndUpdate(sticker._id, {
           firstPlaceVotes: first,

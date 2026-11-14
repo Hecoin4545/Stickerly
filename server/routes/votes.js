@@ -22,22 +22,53 @@ router.post('/submit', auth, async (req, res) => {
     const isMember = room.members.some((m) => m.toString() === req.user._id.toString());
     if (!isMember) return res.status(403).json({ message: 'Not a member of this room' });
 
-    if (!Array.isArray(ballot) || ballot.length !== 3) {
-      return res.status(400).json({ message: 'Ballot must have exactly 3 entries' });
+    const isSoloRoom = room.members.length === 1;
+    const votableCount = isSoloRoom
+      ? await Sticker.countDocuments({ roundId })
+      : await Sticker.countDocuments({ roundId, creatorId: { $ne: req.user._id } });
+
+    const maxAllowed = Math.min(3, Math.max(1, votableCount));
+
+    if (!Array.isArray(ballot) || ballot.length === 0 || ballot.length > maxAllowed) {
+      return res.status(400).json({
+        message: `Ballot must have between 1 and ${maxAllowed} entries`,
+      });
     }
 
-    const ranks = ballot.map((b) => b.rank).sort();
-    if (JSON.stringify(ranks) !== JSON.stringify([1, 2, 3])) {
-      return res.status(400).json({ message: 'Ballot must contain unique ranks 1, 2, and 3' });
+    if (!ballot.some((b) => b.rank === 1)) {
+      return res.status(400).json({ message: 'Ballot must include a 1st place selection' });
+    }
+
+    const ranks = ballot.map((b) => b.rank).sort((a, b) => a - b);
+    const expectedRanks = Array.from({ length: ballot.length }, (_, i) => i + 1);
+    if (JSON.stringify(ranks) !== JSON.stringify(expectedRanks)) {
+      return res.status(400).json({
+        message: `Ballot ranks must be consecutive starting from 1 (${expectedRanks.join(', ')})`,
+      });
     }
 
     const stickerIds = ballot.map((b) => b.stickerId);
-    const ownedStickers = await Sticker.find({
+    const uniqueIds = new Set(stickerIds.map((id) => id.toString()));
+    if (uniqueIds.size !== ballot.length) {
+      return res.status(400).json({ message: 'Cannot assign multiple ranks to the same sticker' });
+    }
+
+    const validRoundStickers = await Sticker.countDocuments({
       _id: { $in: stickerIds },
-      creatorId: req.user._id,
+      roundId,
     });
-    if (ownedStickers.length > 0) {
-      return res.status(400).json({ message: 'Cannot vote for your own sticker' });
+    if (validRoundStickers !== ballot.length) {
+      return res.status(400).json({ message: 'One or more stickers do not belong to this round' });
+    }
+
+    if (!isSoloRoom) {
+      const ownedStickers = await Sticker.find({
+        _id: { $in: stickerIds },
+        creatorId: req.user._id,
+      });
+      if (ownedStickers.length > 0) {
+        return res.status(400).json({ message: 'Cannot vote for your own sticker' });
+      }
     }
 
     const vote = await Vote.findOneAndUpdate(
