@@ -25,8 +25,19 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+  const login = async (email, password, avatar = null) => {
+    let res;
+    if (avatar instanceof File || avatar instanceof Blob) {
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('avatar', avatar);
+      res = await api.post('/auth/login', formData);
+    } else if (typeof avatar === 'string' && avatar.trim()) {
+      res = await api.post('/auth/login', { email, password, avatar: avatar.trim() });
+    } else {
+      res = await api.post('/auth/login', { email, password });
+    }
     const { token: t, user: u } = res.data;
     localStorage.setItem('token', t);
     setToken(t);
@@ -34,13 +45,39 @@ export function AuthProvider({ children }) {
     return u;
   };
 
-  const register = async (username, email, password) => {
-    const res = await api.post('/auth/register', { username, email, password });
+  const register = async (username, email, password, avatar = null) => {
+    let res;
+    if (avatar instanceof File || avatar instanceof Blob) {
+      const formData = new FormData();
+      formData.append('username', username);
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('avatar', avatar);
+      res = await api.post('/auth/register', formData);
+    } else if (typeof avatar === 'string' && avatar.trim()) {
+      res = await api.post('/auth/register', { username, email, password, avatar: avatar.trim() });
+    } else {
+      res = await api.post('/auth/register', { username, email, password });
+    }
     const { token: t, user: u } = res.data;
     localStorage.setItem('token', t);
     setToken(t);
     setUser(u);
     return u;
+  };
+
+  const updateProfile = async ({ avatar, username }) => {
+    let res;
+    if (avatar instanceof File || avatar instanceof Blob) {
+      const formData = new FormData();
+      if (username) formData.append('username', username);
+      formData.append('avatar', avatar);
+      res = await api.put('/auth/profile', formData);
+    } else {
+      res = await api.put('/auth/profile', { avatar, username });
+    }
+    setUser(res.data);
+    return res.data;
   };
 
   const logout = () => {
@@ -51,7 +88,9 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, token, loading, login, register, updateProfile, setUser, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

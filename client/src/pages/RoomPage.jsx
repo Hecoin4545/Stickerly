@@ -34,6 +34,7 @@ import { useAuth } from '../context/AuthContext';
 import { useRoom } from '../context/RoomContext';
 import { useCountdown } from '../hooks/useCountdown';
 import { useSocket } from '../hooks/useSocket';
+import Avatar from '../components/Avatar';
 import api from '../lib/api';
 
 export default function RoomPage() {
@@ -340,12 +341,19 @@ export default function RoomPage() {
 
     try {
       setActionLoading(true);
-      await api.post('/votes/submit', {
+      const res = await api.post('/votes/submit', {
         roundId: round._id,
         roomId,
         ballot: formatted,
       });
-      toast.success('Official ballot confirmed! 🗳️ Points locked in.');
+      if (res.data?.roundStatus === 'completed') {
+        toast.success('All votes submitted! 🏆 Round has completed and points tallied!');
+        loadRound();
+        loadLeaderboard();
+        loadHistory();
+      } else {
+        toast.success('Official ballot confirmed! 🗳️ Points locked in.');
+      }
       setHasVoted(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit ballot');
@@ -360,6 +368,7 @@ export default function RoomPage() {
   );
 
   const isTarget = round?.targetUserId?._id === user?._id;
+  const isAdmin = (currentRoom?.adminId?._id || currentRoom?.adminId)?.toString() === user?._id?.toString();
 
   return (
     <div className="min-h-screen bg-[#F8F7F4] text-[#1A1A1A] flex flex-col font-sans pb-16">
@@ -402,9 +411,7 @@ export default function RoomPage() {
                   {members.map((m) => (
                     <div key={m._id} className="flex items-center justify-between text-xs py-1">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center font-bold text-[10px]">
-                          {m.username[0].toUpperCase()}
-                        </div>
+                        <Avatar src={m.avatar} name={m.username} size="xs" />
                         <span className="font-medium">{m.username}</span>
                         {m._id === currentRoom?.adminId && (
                           <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">Admin</span>
@@ -449,10 +456,10 @@ export default function RoomPage() {
 
           <div
             onClick={() => navigate('/dashboard')}
-            className="w-8 h-8 rounded-full bg-brand-pink text-white font-bold flex items-center justify-center text-xs cursor-pointer hover:opacity-90"
+            className="cursor-pointer hover:opacity-90 transition"
             title="Profile / Dashboard"
           >
-            {user?.username?.[0]?.toUpperCase() || 'U'}
+            <Avatar src={user?.avatar} name={user?.username} size="sm" className="ring-2 ring-brand-pink/50" />
           </div>
         </div>
       </header>
@@ -500,13 +507,13 @@ export default function RoomPage() {
 
           {/* Header Controls */}
           <div className="ml-auto flex items-center gap-2 pl-4">
-            {!round && (
+            {(!round || round.status === 'completed') && isAdmin && (
               <button
                 onClick={handleStartRound}
                 disabled={actionLoading}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-green text-white rounded-lg text-xs font-bold hover:bg-emerald-600 transition"
               >
-                <Play className="w-3.5 h-3.5" /> Start Round #1
+                <Play className="w-3.5 h-3.5" /> {round ? `Start Round #${round.roundNumber + 1}` : 'Start Round #1'}
               </button>
             )}
             <button
@@ -546,6 +553,41 @@ export default function RoomPage() {
               </div>
             ) : (
               <>
+                {round.status === 'completed' && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
+                        🏆
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-emerald-950">
+                          Round #{round.roundNumber} Completed!
+                        </h4>
+                        <p className="text-xs text-emerald-800">
+                          Deliberation concluded and points awarded. View final scores in the Arena!
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setActiveTab('voting')}
+                        className="px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition shadow-sm flex-shrink-0"
+                      >
+                        View Results →
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={handleStartRound}
+                          disabled={actionLoading}
+                          className="px-4 py-2 bg-brand-green text-white text-xs font-bold rounded-xl hover:bg-emerald-600 transition shadow-sm flex-shrink-0"
+                        >
+                          Start Round #{round.roundNumber + 1} →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {round.status === 'voting' && (
                   <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
                     <div className="flex items-center gap-3">
@@ -590,17 +632,13 @@ export default function RoomPage() {
 
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
                         <div className="relative">
-                          <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-brand-pink to-rose-400 flex items-center justify-center text-white text-3xl font-extrabold shadow-md border-4 border-white">
-                            {round.targetUserId?.avatar ? (
-                              <img
-                                src={round.targetUserId.avatar}
-                                alt="target"
-                                className="w-full h-full object-cover rounded-2xl"
-                              />
-                            ) : (
-                              round.targetUserId?.username?.[0]?.toUpperCase() || '?'
-                            )}
-                          </div>
+                          <Avatar
+                            src={round.targetUserId?.avatar}
+                            name={round.targetUserId?.username}
+                            size="2xl"
+                            shape="rounded-2xl"
+                            className="border-4 border-white shadow-md ring-1 ring-gray-100"
+                          />
                           <span className="absolute -bottom-2 -right-2 px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black rounded uppercase tracking-wider shadow">
                             TODAY'S TARGET
                           </span>
@@ -655,7 +693,35 @@ export default function RoomPage() {
                         <span className="text-[11px] font-mono text-gray-400">PNG, JPG up to 25MB</span>
                       </div>
 
-                      {isTarget ? (
+                      {round.status === 'completed' ? (
+                        <div className="bg-gray-50 rounded-xl p-8 text-center border border-dashed border-gray-300">
+                          <Trophy className="w-10 h-10 text-brand-amber mx-auto mb-2" />
+                          <h4 className="font-bold text-sm">Round #{round.roundNumber} is Complete! 🏆</h4>
+                          <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
+                            Voting deliberation has closed. Check out the leaderboard or wait for the next drop!
+                          </p>
+                          <button
+                            onClick={() => setActiveTab('voting')}
+                            className="mt-3 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition"
+                          >
+                            View Final Podium →
+                          </button>
+                        </div>
+                      ) : round.status === 'voting' ? (
+                        <div className="bg-amber-50/50 rounded-xl p-8 text-center border border-dashed border-amber-300">
+                          <Clock className="w-10 h-10 text-amber-500 mx-auto mb-2" />
+                          <h4 className="font-bold text-sm text-amber-950">Submissions Closed — Voting Live! 🗳️</h4>
+                          <p className="text-xs text-amber-800 max-w-sm mx-auto mt-1">
+                            All hunters have uploaded their stickers (or the 10:00 PM deadline has arrived). Deliberation has officially started!
+                          </p>
+                          <button
+                            onClick={() => setActiveTab('voting')}
+                            className="mt-3 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition"
+                          >
+                            Go to Voting Arena →
+                          </button>
+                        </div>
+                      ) : isTarget ? (
                         <div className="bg-gray-50 rounded-xl p-8 text-center border border-dashed border-gray-300">
                           <Shield className="w-10 h-10 text-brand-amber mx-auto mb-2" />
                           <h4 className="font-bold text-sm">You are today's target! 🎯</h4>
@@ -820,9 +886,7 @@ export default function RoomPage() {
                               className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-none text-xs"
                             >
                               <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600 text-[11px]">
-                                  {member.username[0].toUpperCase()}
-                                </div>
+                                <Avatar src={member.avatar} name={member.username} size="xs" />
                                 <span className="font-semibold text-gray-800">
                                   {member.username} {isMe && '(You)'}
                                 </span>
@@ -874,7 +938,10 @@ export default function RoomPage() {
                     {mySticker && (
                       <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm relative group overflow-hidden">
                         <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                          <span className="font-semibold">{user?.username} (You)</span>
+                          <div className="flex items-center gap-1.5 font-semibold text-gray-900">
+                            <Avatar src={user?.avatar} name={user?.username} size="xs" />
+                            <span>{user?.username} (You)</span>
+                          </div>
                           <span className="font-mono text-[10px]">
                             {new Date(mySticker.uploadedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
@@ -1057,11 +1124,16 @@ export default function RoomPage() {
                                   <h4 className="text-sm font-bold text-gray-900 truncate">
                                     "{assignedSticker.title || 'Untitled Candidate'}"
                                   </h4>
-                                  <span className="text-xs text-gray-500">
-                                    {round.status === 'completed'
-                                      ? `by @${assignedSticker.creatorId?.username || 'Hunter'}`
-                                      : 'by @anonymous-lens'}
-                                  </span>
+                                  <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                                    {round.status === 'completed' ? (
+                                      <>
+                                        <Avatar src={assignedSticker.creatorId?.avatar} name={assignedSticker.creatorId?.username} size="xs" />
+                                        <span>by @{assignedSticker.creatorId?.username || 'Hunter'}</span>
+                                      </>
+                                    ) : (
+                                      <span>by @anonymous-lens</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             ) : (
@@ -1155,11 +1227,16 @@ export default function RoomPage() {
                                   <h4 className="text-xs font-bold text-gray-900 truncate">
                                     "{sticker.title || 'Untitled'}"
                                   </h4>
-                                  <span className="text-[11px] text-gray-400 block">
-                                    {round.status === 'completed'
-                                      ? `by @${sticker.creatorId?.username || 'Hunter'}`
-                                      : 'by @anonymous-hunter'}
-                                  </span>
+                                  <div className="text-[11px] text-gray-400 flex items-center gap-1.5 mt-0.5">
+                                    {round.status === 'completed' ? (
+                                      <>
+                                        <Avatar src={sticker.creatorId?.avatar} name={sticker.creatorId?.username} size="xs" />
+                                        <span>by @{sticker.creatorId?.username || 'Hunter'}</span>
+                                      </>
+                                    ) : (
+                                      <span>by @anonymous-hunter</span>
+                                    )}
+                                  </div>
                                   {round.status === 'completed' && (
                                     <span className="text-[10px] font-bold text-brand-pink">
                                       {sticker.totalPoints} pts ({sticker.firstPlaceVotes} 🥇, {sticker.secondPlaceVotes} 🥈, {sticker.thirdPlaceVotes} 🥉)
@@ -1260,8 +1337,14 @@ export default function RoomPage() {
                       CURRENT LEADER
                     </span>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-amber-400 text-white font-bold flex items-center justify-center text-sm shadow">
-                        👑
+                      <div className="relative">
+                        <Avatar
+                          src={leaderboard[0]?.avatar}
+                          name={leaderboard[0]?.username}
+                          size="md"
+                          className="ring-2 ring-amber-400 shadow"
+                        />
+                        <span className="absolute -top-1 -right-1 text-xs">👑</span>
                       </div>
                       <div>
                         <div className="font-extrabold text-base">
@@ -1321,17 +1404,7 @@ export default function RoomPage() {
                               {idx < 3 ? medals[idx] : String(idx + 1).padStart(2, '0')}
                             </span>
 
-                            <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-700 text-xs">
-                              {member.avatar ? (
-                                <img
-                                  src={member.avatar}
-                                  alt="avatar"
-                                  className="w-full h-full object-cover rounded-full"
-                                />
-                              ) : (
-                                member.username[0].toUpperCase()
-                              )}
-                            </div>
+                            <Avatar src={member.avatar} name={member.username} size="md" />
 
                             <div>
                               <div className="flex items-center gap-2 font-extrabold text-sm text-[#1A1A1A]">
@@ -1397,9 +1470,11 @@ export default function RoomPage() {
                           ROUND #{h.roundNumber}
                         </span>
                         <h4 className="text-sm font-bold mt-1">"{h.theme}"</h4>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Target: @{h.targetUserId?.username}
-                        </p>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
+                          <span>Target:</span>
+                          <Avatar src={h.targetUserId?.avatar} name={h.targetUserId?.username} size="xs" />
+                          <span>@{h.targetUserId?.username}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1422,9 +1497,7 @@ export default function RoomPage() {
                       className="flex items-center justify-between p-3 bg-gray-50 rounded-xl text-xs"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center font-bold">
-                          {m.username[0].toUpperCase()}
-                        </div>
+                        <Avatar src={m.avatar} name={m.username} size="sm" />
                         <div>
                           <span className="font-bold text-gray-800">{m.username}</span>
                           <span className="text-gray-400 text-[11px] block">
@@ -1476,11 +1549,21 @@ export default function RoomPage() {
                 <h3 className="text-lg md:text-xl font-black tracking-tight truncate">
                   "{fullscreenSticker.title || 'Untitled Sticker'}"
                 </h3>
-                <span className="text-xs text-gray-400">
-                  {round?.status === 'completed'
-                    ? `Uploaded by @${fullscreenSticker.creatorId?.username || 'Hunter'}`
-                    : 'Uploaded by @anonymous-hunter'}
-                </span>
+                <div className="text-xs text-gray-400 flex items-center gap-1.5 mt-1">
+                  {round?.status === 'completed' ? (
+                    <>
+                      <span>Uploaded by</span>
+                      <Avatar
+                        src={fullscreenSticker.creatorId?.avatar}
+                        name={fullscreenSticker.creatorId?.username}
+                        size="xs"
+                      />
+                      <span>@{fullscreenSticker.creatorId?.username || 'Hunter'}</span>
+                    </>
+                  ) : (
+                    <span>Uploaded by @anonymous-hunter</span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-3 flex-shrink-0">

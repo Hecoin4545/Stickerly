@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Hash, Users, ChevronRight, X, LogOut, Zap } from 'lucide-react';
+import { Plus, Hash, Users, ChevronRight, X, LogOut, Zap, Camera, Trophy, Flame } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useRoom } from '../context/RoomContext';
+import Avatar from '../components/Avatar';
 import api from '../lib/api';
 
 function PhaseChip({ status }) {
@@ -46,23 +47,27 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
   const { createRoom, joinRoom } = useRoom();
   const navigate = useNavigate();
 
   const [rooms, setRooms] = useState([]);
   const [loadingRooms, setLoadingRooms] = useState(true);
-  const [modal, setModal] = useState(null); // 'create' | 'join' | null
+  const [modal, setModal] = useState(null); // 'create' | 'join' | 'profile' | null
   const [roomName, setRoomName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Profile modal photo state
+  const [newAvatarFile, setNewAvatarFile] = useState(null);
+  const [newAvatarPreview, setNewAvatarPreview] = useState(null);
+  const profileFileRef = useRef(null);
 
   useEffect(() => {
     api
       .get('/rooms/my')
       .then((r) => setRooms(r.data))
       .catch(() => {
-        // Silently fail — user may have no rooms yet
         setRooms([]);
       })
       .finally(() => setLoadingRooms(false));
@@ -107,31 +112,127 @@ export default function DashboardPage() {
     }
   };
 
+  const handleAvatarFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('Image must be under 10MB');
+        return;
+      }
+      setNewAvatarFile(file);
+      setNewAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSaveProfilePhoto = async (e) => {
+    e.preventDefault();
+    if (!newAvatarFile) {
+      toast.error('Please choose a new photo');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await updateProfile({ avatar: newAvatarFile });
+      toast.success('Profile photo updated! ✨');
+      setModal(null);
+      setNewAvatarFile(null);
+      setNewAvatarPreview(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update photo');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-brand-cream">
       {/* Nav */}
       <nav className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2 font-bold text-xl">
+        <div className="flex items-center gap-2 font-bold text-xl cursor-pointer" onClick={() => navigate('/dashboard')}>
           <span>🎭</span>
-          <span>Stickerly</span>
+          <span className="font-extrabold tracking-tight">Stickerly</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-600">
-            Hey, <span className="font-semibold text-gray-900">@{user?.username}</span>
-          </div>
-          <div className="flex items-center gap-1 text-sm font-bold text-brand-amber">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <button
+            onClick={() => setModal('profile')}
+            className="flex items-center gap-2.5 p-1 pr-2 rounded-full hover:bg-gray-100 transition group text-left"
+            title="Edit profile photo"
+          >
+            <Avatar
+              src={user?.avatar}
+              name={user?.username}
+              size="md"
+              className="ring-2 ring-brand-pink/50 group-hover:ring-brand-pink shadow-sm"
+            />
+            <div className="text-sm text-gray-600 hidden sm:block">
+              <span className="font-semibold text-gray-900 group-hover:text-brand-pink transition">
+                @{user?.username}
+              </span>
+            </div>
+          </button>
+          <div className="flex items-center gap-1 text-xs sm:text-sm font-bold text-brand-amber bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
             <Zap className="w-4 h-4" /> {user?.totalPoints || 0} pts
           </div>
           <button
             onClick={logout}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition"
+            className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-500 hover:text-gray-700 transition"
           >
-            <LogOut className="w-4 h-4" /> Logout
+            <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        {/* User Profile Banner */}
+        <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-8 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-4 text-center sm:text-left">
+            <div
+              className="relative group cursor-pointer"
+              onClick={() => setModal('profile')}
+              title="Click to update profile photo"
+            >
+              <Avatar
+                src={user?.avatar}
+                name={user?.username}
+                size="xl"
+                className="ring-4 ring-brand-pink/20 shadow-md group-hover:ring-brand-pink transition"
+              />
+              <div className="absolute -bottom-1 -right-1 p-1.5 bg-brand-pink text-white rounded-full shadow hover:scale-110 transition">
+                <Camera className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 justify-center sm:justify-start">
+                <h2 className="text-xl font-black text-gray-900">{user?.username}</h2>
+                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-mono">
+                  @{user?.username?.toLowerCase()}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Your profile photo is live across all squads, voter ballots & winner podiums.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-center px-4 py-2.5 bg-amber-50 rounded-2xl border border-amber-100 min-w-[70px]">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Points</span>
+              <span className="text-lg font-black text-brand-amber">{user?.totalPoints || 0}</span>
+            </div>
+            <div className="text-center px-4 py-2.5 bg-pink-50 rounded-2xl border border-pink-100 min-w-[70px]">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Streak</span>
+              <span className="text-lg font-black text-brand-pink flex items-center justify-center gap-0.5">
+                <Flame className="w-4 h-4 fill-brand-pink" /> {user?.streak || 0}d
+              </span>
+            </div>
+            <div className="text-center px-4 py-2.5 bg-purple-50 rounded-2xl border border-purple-100 min-w-[70px]">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Podiums</span>
+              <span className="text-lg font-black text-purple-600 flex items-center justify-center gap-0.5">
+                <Trophy className="w-4 h-4 text-purple-600" /> {user?.podiums || 0}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -162,13 +263,13 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : rooms.length === 0 ? (
-          <div className="text-center py-20">
+          <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
             <div className="text-6xl mb-4">🎭</div>
             <h2 className="text-xl font-bold text-gray-700 mb-2">No rooms yet</h2>
             <p className="text-gray-400 text-sm mb-6">Create a room and invite your squad to start playing</p>
             <button
               onClick={() => setModal('create')}
-              className="px-6 py-3 bg-brand-pink text-white font-semibold rounded-xl hover:bg-pink-600 transition"
+              className="px-6 py-3 bg-brand-pink text-white font-semibold rounded-xl hover:bg-pink-600 transition shadow-md shadow-pink-200"
             >
               Create Your First Room
             </button>
@@ -180,25 +281,50 @@ export default function DashboardPage() {
                 key={room._id}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-brand-pink/40 hover:shadow-md transition-all group"
+                className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-brand-pink/40 hover:shadow-md transition-all group flex flex-col justify-between"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-bold text-lg text-gray-900">{room.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="bg-gray-100 text-gray-600 font-mono text-xs px-2 py-0.5 rounded-lg font-bold tracking-widest">
-                        {room.code}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-gray-400">
-                        <Users className="w-3 h-3" /> {room.members?.length || 0} members
-                      </span>
+                <div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-bold text-lg text-gray-900">{room.name}</h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="bg-gray-100 text-gray-600 font-mono text-xs px-2 py-0.5 rounded-lg font-bold tracking-widest">
+                          {room.code}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Users className="w-3 h-3" /> {room.members?.length || 0} members
+                        </span>
+                      </div>
                     </div>
+                    <PhaseChip status={room.currentRoundStatus || 'hunt'} />
                   </div>
-                  <PhaseChip status={room.currentRoundStatus || 'hunt'} />
+
+                  {/* Member avatars preview */}
+                  {room.members && room.members.length > 0 && (
+                    <div className="flex items-center gap-1 mb-4">
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {room.members.slice(0, 5).map((m) => (
+                          <Avatar
+                            key={m._id}
+                            src={m.avatar}
+                            name={m.username}
+                            size="xs"
+                            className="ring-2 ring-white"
+                          />
+                        ))}
+                      </div>
+                      {room.members.length > 5 && (
+                        <span className="text-[11px] text-gray-400 pl-1 font-semibold">
+                          +{room.members.length - 5}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-400 mb-4">
+                    Round {room.totalRounds || 0} · Season {room.season || 1}
+                  </p>
                 </div>
-                <p className="text-xs text-gray-400 mb-4">
-                  Round {room.totalRounds || 0} · Season {room.season || 1}
-                </p>
                 <button
                   onClick={() => navigate(`/room/${room._id}`)}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-brand-dark text-white text-sm font-semibold rounded-xl group-hover:bg-gray-800 transition"
@@ -210,6 +336,63 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Profile Photo Modal */}
+      {modal === 'profile' && (
+        <Modal title="Update Profile Photo" onClose={() => setModal(null)}>
+          <form onSubmit={handleSaveProfilePhoto} className="space-y-5 text-center">
+            <div className="flex flex-col items-center justify-center">
+              <div
+                className="relative group cursor-pointer"
+                onClick={() => profileFileRef.current?.click()}
+                title="Select photo"
+              >
+                <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-white shadow-xl ring-2 ring-brand-pink/30 flex items-center justify-center bg-gray-100">
+                  {newAvatarPreview ? (
+                    <img src={newAvatarPreview} alt="New Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <Avatar src={user?.avatar} name={user?.username} size="2xl" />
+                  )}
+                </div>
+                <div className="absolute bottom-1 right-1 p-2 bg-brand-pink text-white rounded-full shadow-lg hover:scale-110 transition">
+                  <Camera className="w-4 h-4" />
+                </div>
+              </div>
+              <input
+                ref={profileFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarFileSelected}
+              />
+              <p className="text-xs text-gray-500 mt-3">
+                Click the circle above to upload a new profile picture.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  setNewAvatarFile(null);
+                  setNewAvatarPreview(null);
+                }}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || !newAvatarFile}
+                className="flex-1 py-2.5 bg-brand-pink text-white font-semibold rounded-xl hover:bg-pink-600 transition disabled:opacity-50 text-sm shadow-md shadow-pink-200"
+              >
+                {submitting ? 'Saving…' : 'Save Photo'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Create Room Modal */}
       {modal === 'create' && (

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Camera, X, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
@@ -10,13 +10,36 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
+  const fileInputRef = useRef(null);
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
   const isRegister = mode === 'register';
 
   const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('Image must be under 10MB');
+        return;
+      }
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+      toast.success('Photo selected! 📸');
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarFile(null);
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,10 +50,10 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
     setLoading(true);
     try {
       if (isRegister) {
-        await register(form.username, form.email, form.password);
+        await register(form.username, form.email, form.password, avatarFile);
         toast.success('Account created! Welcome to Stickerly 🎭');
       } else {
-        await login(form.email, form.password);
+        await login(form.email, form.password, avatarFile);
         toast.success('Welcome back! 🎭');
       }
       navigate('/dashboard');
@@ -43,7 +66,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
   };
 
   return (
-    <div className="min-h-screen bg-brand-cream flex items-center justify-center px-4">
+    <div className="min-h-screen bg-brand-cream flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         {/* Back to home */}
         <button
@@ -60,7 +83,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
           className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8"
         >
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-6">
             <div className="text-4xl mb-3">🎭</div>
             <h1 className="text-2xl font-extrabold text-gray-900">
               {isRegister ? 'Create your account' : 'Welcome back'}
@@ -70,7 +93,68 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Profile Photo Option (in both login and register) */}
+            <div className="flex flex-col items-center justify-center p-4 bg-gray-50 border border-gray-100 rounded-2xl">
+              <div
+                className="relative group cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+                title="Click to select profile photo"
+              >
+                <div className="w-20 h-20 rounded-full overflow-hidden bg-white border-2 border-dashed border-gray-300 group-hover:border-brand-pink flex items-center justify-center shadow-sm transition">
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt="Avatar Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-brand-pink transition">
+                      <Camera className="w-6 h-6 mb-1 text-gray-400 group-hover:text-brand-pink" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-brand-pink">
+                        Add Photo
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="absolute -bottom-1 -right-1 p-1.5 bg-brand-pink text-white rounded-full shadow-md group-hover:scale-110 transition">
+                  <Camera className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+
+              <div className="mt-2 text-center">
+                <span className="text-xs font-semibold text-gray-700 block">
+                  {isRegister ? 'Profile Photo (Optional)' : 'Profile Photo (Optional)'}
+                </span>
+                <div className="text-[11px] text-gray-400 mt-0.5">
+                  {avatarPreview ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveAvatar();
+                      }}
+                      className="text-red-500 font-semibold hover:underline inline-flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Remove photo
+                    </button>
+                  ) : isRegister ? (
+                    'Add a photo so your friends recognize you'
+                  ) : (
+                    'Upload a photo to update your avatar'
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Username (register only) */}
             {isRegister && (
               <div>
@@ -161,7 +245,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-brand-dark text-white font-semibold rounded-xl hover:bg-gray-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+              className="w-full py-3.5 bg-brand-dark text-white font-semibold rounded-xl hover:bg-gray-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-md"
             >
               {loading ? 'Please wait…' : isRegister ? 'Create Account' : 'Sign In'}
             </button>
@@ -174,6 +258,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
               onClick={() => {
                 setMode(isRegister ? 'login' : 'register');
                 setForm({ username: '', email: '', password: '', confirm: '' });
+                handleRemoveAvatar();
               }}
               className="font-semibold text-brand-pink hover:underline"
             >
