@@ -7,6 +7,7 @@ const upload = require('../middleware/upload');
 const Sticker = require('../models/Sticker');
 const Round = require('../models/Round');
 const Room = require('../models/Room');
+const { syncRoundStatus, getEligibleHunters } = require('../services/roundService');
 
 const hasCloudinary =
   process.env.CLOUDINARY_CLOUD_NAME &&
@@ -25,7 +26,8 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
 
     if (!room.currentRoundId) return res.status(400).json({ message: 'No active round' });
 
-    const round = await Round.findById(room.currentRoundId);
+    const io = req.app.get('io');
+    let round = await syncRoundStatus(room.currentRoundId, io);
     if (!round || round.status !== 'hunt') {
       return res.status(400).json({ message: 'Round is not in hunt phase' });
     }
@@ -33,7 +35,8 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
     const isMember = room.members.some((m) => m.toString() === req.user._id.toString());
     if (!isMember) return res.status(403).json({ message: 'Not a member of this room' });
 
-    if (room.members.length > 1 && round.targetUserId.toString() === req.user._id.toString()) {
+    const eligibleHunters = getEligibleHunters(room, round);
+    if (!eligibleHunters.includes(req.user._id.toString())) {
       return res.status(403).json({ message: 'Target cannot upload stickers' });
     }
 
@@ -62,44 +65,17 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
 
     await Round.findByIdAndUpdate(round._id, { $inc: { submissionCount: 1 } });
 
-    // Check if everyone has submitted a sticker except the target user ("the one whose name is written")
-    const targetIdStr = round.targetUserId.toString();
-    const eligibleMembers = [
-      ...new Set(
-        room.members
-          .map((m) => m.toString())
-          .filter((id) => (room.members.length > 1 ? id !== targetIdStr : true))
-      ),
-    ];
+    // Sync round status: if all users have submitted before 10 PM, round transitions to voting
+    round = await syncRoundStatus(round._id, io);
 
     const allStickers = await Sticker.find({ roundId: round._id });
-    const uploaderIds = new Set(allStickers.map((s) => s.creatorId.toString()));
-
-    const allUploaded =
-      eligibleMembers.length > 0 &&
-      eligibleMembers.every((m) => uploaderIds.has(m));
-
-    let roundStatus = round.status;
-    if (allUploaded) {
-      round.status = 'voting';
-      round.votingStart = new Date();
-      await round.save();
-      roundStatus = 'voting';
-
-      const io = req.app.get('io');
-      if (io) {
-        io.to(roomId).emit('phase-change', { phase: 'voting' });
-      }
-    }
-
-    const io = req.app.get('io');
     if (io) {
       io.to(roomId).emit('submission-update', { submittedCount: allStickers.length });
     }
 
     const stickerObj = sticker.toObject();
     delete stickerObj.creatorId;
-    res.status(201).json({ ...stickerObj, roundStatus });
+    res.status(201).json({ ...stickerObj, roundStatus: round.status });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
