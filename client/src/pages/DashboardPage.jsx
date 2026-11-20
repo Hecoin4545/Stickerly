@@ -10,6 +10,7 @@ import api from '../lib/api';
 
 function PhaseChip({ status }) {
   const map = {
+<<<<<<< HEAD
     uploads_open: { label: 'UPLOADS OPEN', color: 'bg-emerald-600 text-white', dot: 'bg-emerald-300' },
     voting_open: { label: 'VOTING LIVE', color: 'bg-amber-500 text-white', dot: 'bg-yellow-200' },
     completed: { label: 'COMPLETED', color: 'bg-gray-200 text-gray-700', dot: 'bg-gray-400' },
@@ -18,6 +19,13 @@ function PhaseChip({ status }) {
     voting: { label: 'VOTING LIVE', color: 'bg-amber-500 text-white', dot: 'bg-yellow-200' },
   };
   const cfg = map[status] || map.waiting;
+=======
+    hunt: { label: 'HUNT PHASE', color: 'bg-brand-green text-white', dot: 'bg-green-300' },
+    voting: { label: 'VOTING', color: 'bg-brand-amber text-white', dot: 'bg-yellow-300' },
+    completed: { label: 'COMPLETED', color: 'bg-gray-200 text-gray-600', dot: 'bg-gray-400' },
+  };
+  const cfg = map[status] || map.hunt;
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.color}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} animate-pulse`} />
@@ -58,7 +66,10 @@ export default function DashboardPage() {
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [modal, setModal] = useState(null); // 'create' | 'join' | 'profile' | null
   const [roomName, setRoomName] = useState('');
+<<<<<<< HEAD
   const [roomMode, setRoomMode] = useState('stickerly');
+=======
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
   const [joinCode, setJoinCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -82,12 +93,19 @@ export default function DashboardPage() {
     if (!roomName.trim()) return;
     setSubmitting(true);
     try {
+<<<<<<< HEAD
       const room = await createRoom(roomName.trim(), roomMode);
+=======
+      const room = await createRoom(roomName.trim());
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
       toast.success(`Room "${room.name}" created!`);
       setRooms((prev) => [...prev, room]);
       setModal(null);
       setRoomName('');
+<<<<<<< HEAD
       setRoomMode('stickerly');
+=======
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
       navigate(`/room/${room._id}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create room');
@@ -291,6 +309,7 @@ export default function DashboardPage() {
                 <div>
                   <div className="flex items-start justify-between mb-3">
                     <div>
+<<<<<<< HEAD
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-lg text-gray-900">{room.name}</h3>
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
@@ -299,6 +318,9 @@ export default function DashboardPage() {
                           {room.mode === 'challenges' ? '🎯 Challenges' : '🎭 Stickerly'}
                         </span>
                       </div>
+=======
+                      <h3 className="font-bold text-lg text-gray-900">{room.name}</h3>
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
                       <div className="flex items-center gap-2 mt-1">
                         <span className="bg-gray-100 text-gray-600 font-mono text-xs px-2 py-0.5 rounded-lg font-bold tracking-widest">
                           {room.code}
@@ -308,7 +330,11 @@ export default function DashboardPage() {
                         </span>
                       </div>
                     </div>
+<<<<<<< HEAD
                     <PhaseChip status={room.currentRoundId?.status || room.currentRoundStatus || 'waiting'} />
+=======
+                    <PhaseChip status={room.currentRoundStatus || 'hunt'} />
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
                   </div>
 
                   {/* Member avatars preview */}
@@ -422,6 +448,7 @@ export default function DashboardPage() {
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-brand-pink focus:ring-2 focus:ring-pink-100"
               />
             </div>
+<<<<<<< HEAD
 
             {/* Mode Selection */}
             <div>
@@ -466,12 +493,18 @@ export default function DashboardPage() {
               </div>
             </div>
 
+=======
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
             <button
               type="submit"
               disabled={submitting}
               className="w-full py-3 bg-brand-pink text-white font-semibold rounded-xl hover:bg-pink-600 transition disabled:opacity-60"
             >
+<<<<<<< HEAD
               {submitting ? 'Creating…' : `Create ${roomMode === 'challenges' ? '🎯 Challenges' : '🎭 Stickerly'} Room`}
+=======
+              {submitting ? 'Creating…' : 'Create Room 🎭'}
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
             </button>
           </form>
         </Modal>

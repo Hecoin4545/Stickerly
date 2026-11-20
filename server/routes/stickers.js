@@ -7,7 +7,11 @@ const upload = require('../middleware/upload');
 const Sticker = require('../models/Sticker');
 const Round = require('../models/Round');
 const Room = require('../models/Room');
+<<<<<<< HEAD
 const User = require('../models/User');
+=======
+const { syncRoundStatus, getEligibleHunters } = require('../services/roundService');
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
 
 const hasCloudinary =
   process.env.CLOUDINARY_CLOUD_NAME &&
@@ -18,7 +22,11 @@ const hasCloudinary =
 // POST /api/stickers/upload
 router.post('/upload', auth, upload.single('image'), async (req, res) => {
   try {
+<<<<<<< HEAD
     const { roomId, challengeIndex } = req.body;
+=======
+    const { roomId } = req.body;
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     if (!roomId) return res.status(400).json({ message: 'roomId required' });
 
     const room = await Room.findById(roomId);
@@ -27,14 +35,31 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
     if (!room.currentRoundId) return res.status(400).json({ message: 'No active round' });
 
     const io = req.app.get('io');
+<<<<<<< HEAD
     let round = await Round.findById(room.currentRoundId);
     if (!round || round.status !== 'uploads_open') {
       return res.status(400).json({ message: 'Uploads are not currently open' });
+=======
+    let round = await syncRoundStatus(room.currentRoundId, io);
+    if (!round || round.status !== 'hunt') {
+      return res.status(400).json({ message: 'Round is not in hunt phase' });
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     }
 
     const isMember = room.members.some((m) => m.toString() === req.user._id.toString());
     if (!isMember) return res.status(403).json({ message: 'Not a member of this room' });
 
+<<<<<<< HEAD
+=======
+    const eligibleHunters = getEligibleHunters(room, round);
+    if (!eligibleHunters.includes(req.user._id.toString())) {
+      return res.status(403).json({ message: 'Target cannot upload stickers' });
+    }
+
+    const existing = await Sticker.findOne({ roundId: round._id, creatorId: req.user._id });
+    if (existing) return res.status(409).json({ message: 'Already uploaded a sticker this round' });
+
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     if (!req.file) return res.status(400).json({ message: 'Image file required' });
 
     // Handle Cloudinary vs Local Storage URL
@@ -45,7 +70,11 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
       imageUrl = `${serverBase}/uploads/${req.file.filename}`;
     }
 
+<<<<<<< HEAD
     const stickerData = {
+=======
+    const sticker = await Sticker.create({
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
       roundId: round._id,
       roomId,
       creatorId: req.user._id,
@@ -53,6 +82,7 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
       publicId,
       title: req.body.title || '',
       isEarlyBird: false,
+<<<<<<< HEAD
     };
 
     // For challenges mode, track which challenge is being completed
@@ -92,6 +122,14 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
       // Award 10 points for completing a challenge!
       await User.findByIdAndUpdate(req.user._id, { $inc: { totalPoints: 10 } });
     }
+=======
+    });
+
+    await Round.findByIdAndUpdate(round._id, { $inc: { submissionCount: 1 } });
+
+    // Sync round status: if all users have submitted before 10 PM, round transitions to voting
+    round = await syncRoundStatus(round._id, io);
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
 
     const allStickers = await Sticker.find({ roundId: round._id });
     if (io) {
@@ -99,6 +137,10 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
     }
 
     const stickerObj = sticker.toObject();
+<<<<<<< HEAD
+=======
+    delete stickerObj.creatorId;
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     res.status(201).json({ ...stickerObj, roundStatus: round.status });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

@@ -11,6 +11,7 @@ module.exports = (io) => {
     let currentUserId = null;
 
     // Join a room channel
+<<<<<<< HEAD
     socket.on('join-room', (payload) => {
       const roomId = typeof payload === 'object' && payload !== null ? payload.roomId : payload;
       const userId = typeof payload === 'object' && payload !== null ? payload.userId : null;
@@ -35,6 +36,24 @@ module.exports = (io) => {
       socket.leave(roomId.toString());
       if (roomOnline[roomId.toString()]) {
         roomOnline[roomId.toString()].delete(socket.id);
+=======
+    socket.on('join-room', ({ roomId, userId }) => {
+      socket.join(roomId);
+      currentRoomId = roomId;
+      currentUserId = userId;
+
+      if (!roomOnline[roomId]) roomOnline[roomId] = new Set();
+      roomOnline[roomId].add(socket.id);
+
+      socket.to(roomId).emit('member-online', { userId, socketId: socket.id });
+    });
+
+    // Leave a room channel
+    socket.on('leave-room', ({ roomId }) => {
+      socket.leave(roomId);
+      if (roomOnline[roomId]) {
+        roomOnline[roomId].delete(socket.id);
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
       }
     });
 

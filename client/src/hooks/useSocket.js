@@ -6,7 +6,11 @@ export function useSocket({ roomId, onPhaseChange, onSubmissionUpdate, onRoundRe
     socket.connect();
 
     if (roomId) {
+<<<<<<< HEAD
       socket.emit('join-room', { roomId });
+=======
+      socket.emit('join-room', roomId);
+>>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     }
 
     if (onPhaseChange) socket.on('phase-change', onPhaseChange);
