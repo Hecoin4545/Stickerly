@@ -10,7 +10,6 @@ import api from '../lib/api';
 
 function PhaseChip({ status }) {
   const map = {
-<<<<<<< HEAD
     uploads_open: { label: 'UPLOADS OPEN', color: 'bg-emerald-600 text-white', dot: 'bg-emerald-300' },
     voting_open: { label: 'VOTING LIVE', color: 'bg-amber-500 text-white', dot: 'bg-yellow-200' },
     completed: { label: 'COMPLETED', color: 'bg-gray-200 text-gray-700', dot: 'bg-gray-400' },
@@ -19,13 +18,6 @@ function PhaseChip({ status }) {
     voting: { label: 'VOTING LIVE', color: 'bg-amber-500 text-white', dot: 'bg-yellow-200' },
   };
   const cfg = map[status] || map.waiting;
-=======
-    hunt: { label: 'HUNT PHASE', color: 'bg-brand-green text-white', dot: 'bg-green-300' },
-    voting: { label: 'VOTING', color: 'bg-brand-amber text-white', dot: 'bg-yellow-300' },
-    completed: { label: 'COMPLETED', color: 'bg-gray-200 text-gray-600', dot: 'bg-gray-400' },
-  };
-  const cfg = map[status] || map.hunt;
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.color}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} animate-pulse`} />
@@ -42,7 +34,7 @@ function Modal({ title, onClose, children }) {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6"
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto"
         >
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-lg font-bold">{title}</h3>
@@ -66,10 +58,7 @@ export default function DashboardPage() {
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [modal, setModal] = useState(null); // 'create' | 'join' | 'profile' | null
   const [roomName, setRoomName] = useState('');
-<<<<<<< HEAD
   const [roomMode, setRoomMode] = useState('stickerly');
-=======
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
   const [joinCode, setJoinCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -93,19 +82,12 @@ export default function DashboardPage() {
     if (!roomName.trim()) return;
     setSubmitting(true);
     try {
-<<<<<<< HEAD
       const room = await createRoom(roomName.trim(), roomMode);
-=======
-      const room = await createRoom(roomName.trim());
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
       toast.success(`Room "${room.name}" created!`);
       setRooms((prev) => [...prev, room]);
       setModal(null);
       setRoomName('');
-<<<<<<< HEAD
       setRoomMode('stickerly');
-=======
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
       navigate(`/room/${room._id}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create room');
@@ -309,18 +291,18 @@ export default function DashboardPage() {
                 <div>
                   <div className="flex items-start justify-between mb-3">
                     <div>
-<<<<<<< HEAD
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-lg text-gray-900">{room.name}</h3>
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                          room.mode === 'challenges' ? 'bg-purple-100 text-purple-700' : 'bg-pink-100 text-pink-700'
+                          room.mode === 'challenges'
+                            ? 'bg-purple-100 text-purple-700'
+                            : room.mode === 'findclick'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-pink-100 text-pink-700'
                         }`}>
-                          {room.mode === 'challenges' ? '🎯 Challenges' : '🎭 Stickerly'}
+                          {room.mode === 'challenges' ? '🎯 Challenges' : room.mode === 'findclick' ? '🔍 Find & Click' : '🎭 Stickerly'}
                         </span>
                       </div>
-=======
-                      <h3 className="font-bold text-lg text-gray-900">{room.name}</h3>
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
                       <div className="flex items-center gap-2 mt-1">
                         <span className="bg-gray-100 text-gray-600 font-mono text-xs px-2 py-0.5 rounded-lg font-bold tracking-widest">
                           {room.code}
@@ -330,11 +312,7 @@ export default function DashboardPage() {
                         </span>
                       </div>
                     </div>
-<<<<<<< HEAD
                     <PhaseChip status={room.currentRoundId?.status || room.currentRoundStatus || 'waiting'} />
-=======
-                    <PhaseChip status={room.currentRoundStatus || 'hunt'} />
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
                   </div>
 
                   {/* Member avatars preview */}
@@ -448,18 +426,17 @@ export default function DashboardPage() {
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-brand-pink focus:ring-2 focus:ring-pink-100"
               />
             </div>
-<<<<<<< HEAD
 
             {/* Mode Selection */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                 Room Mode
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <button
                   type="button"
                   onClick={() => setRoomMode('stickerly')}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all text-left ${
+                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all text-center ${
                     roomMode === 'stickerly'
                       ? 'border-brand-pink bg-pink-50'
                       : 'border-gray-200 hover:border-gray-300'
@@ -467,16 +444,16 @@ export default function DashboardPage() {
                 >
                   <span className="text-2xl">🎭</span>
                   <div>
-                    <div className="font-bold text-sm">Stickerly</div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">
-                      Click photos, make fun stickers, vote on the best ones
+                    <div className="font-bold text-xs">Stickerly</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">
+                      Candid stickers & vote
                     </div>
                   </div>
                 </button>
                 <button
                   type="button"
                   onClick={() => setRoomMode('challenges')}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all text-left ${
+                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all text-center ${
                     roomMode === 'challenges'
                       ? 'border-purple-500 bg-purple-50'
                       : 'border-gray-200 hover:border-gray-300'
@@ -484,27 +461,46 @@ export default function DashboardPage() {
                 >
                   <span className="text-2xl">🎯</span>
                   <div>
-                    <div className="font-bold text-sm">Challenges</div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">
-                      10 fun challenges with conversation topics and silly poses
+                    <div className="font-bold text-xs">Challenges</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">
+                      Random target & poses
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoomMode('findclick')}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all text-center ${
+                    roomMode === 'findclick'
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-2xl">🔍</span>
+                  <div>
+                    <div className="font-bold text-xs">Find & Click</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">
+                      AI video/clue hunt
                     </div>
                   </div>
                 </button>
               </div>
             </div>
 
-=======
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
             <button
               type="submit"
               disabled={submitting}
               className="w-full py-3 bg-brand-pink text-white font-semibold rounded-xl hover:bg-pink-600 transition disabled:opacity-60"
             >
-<<<<<<< HEAD
-              {submitting ? 'Creating…' : `Create ${roomMode === 'challenges' ? '🎯 Challenges' : '🎭 Stickerly'} Room`}
-=======
-              {submitting ? 'Creating…' : 'Create Room 🎭'}
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
+              {submitting
+                ? 'Creating…'
+                : `Create ${
+                    roomMode === 'challenges'
+                      ? '🎯 Challenges'
+                      : roomMode === 'findclick'
+                      ? '🔍 Find & Click'
+                      : '🎭 Stickerly'
+                  } Room`}
             </button>
           </form>
         </Modal>

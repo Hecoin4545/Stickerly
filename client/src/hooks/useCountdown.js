@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
 
+function calcTimeLeft(target) {
+  if (!target) return { hours: 0, minutes: 0, seconds: 0, isExpired: true, percentElapsed: 100 };
+  const now = Date.now();
+  const end = new Date(target).getTime();
+  const diff = end - now;
+  if (diff <= 0) {
+    return { hours: 0, minutes: 0, seconds: 0, isExpired: true, percentElapsed: 100 };
+  }
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+  return { hours, minutes, seconds, isExpired: false, percentElapsed: 0 };
+}
+
 export function useCountdown(targetDate) {
   const [timeLeft, setTimeLeft] = useState(() => calcTimeLeft(targetDate));
-
-  function calcTimeLeft(target) {
-    if (!target) return { hours: 0, minutes: 0, seconds: 0, isExpired: true, percentElapsed: 100 };
-    const now = Date.now();
-    const end = new Date(target).getTime();
-    const diff = end - now;
-    if (diff <= 0) {
-      return { hours: 0, minutes: 0, seconds: 0, isExpired: true, percentElapsed: 100 };
-    }
-    const hours = Math.floor(diff / 3600000);
-    const minutes = Math.floor((diff % 3600000) / 60000);
-    const seconds = Math.floor((diff % 60000) / 1000);
-    return { hours, minutes, seconds, isExpired: false, percentElapsed: 0 };
-  }
 
   useEffect(() => {
     if (!targetDate) return;

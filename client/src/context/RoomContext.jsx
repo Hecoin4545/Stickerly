@@ -37,13 +37,8 @@ export function RoomProvider({ children }) {
     return res.data;
   };
 
-<<<<<<< HEAD
   const createRoom = async (name, mode = 'stickerly') => {
     const res = await api.post('/rooms/create', { name, mode });
-=======
-  const createRoom = async (name) => {
-    const res = await api.post('/rooms/create', { name });
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     return res.data;
   };
 

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Camera, X, Image as ImageIcon } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Camera, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,7 +30,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
       }
       setAvatarFile(file);
       setAvatarPreview(URL.createObjectURL(file));
-      toast.success('Photo selected! 📸');
+      toast.success('Profile photo set! 📸');
     }
   };
 
@@ -43,6 +43,15 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // ── MANDATORY PROFILE PHOTO for registration ──────────────────────────
+    if (isRegister && !avatarFile) {
+      toast.error('A profile photo is required to join Stickerly! 📸');
+      fileInputRef.current?.click();
+      return;
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     if (isRegister && form.password !== form.confirm) {
       toast.error('Passwords do not match');
       return;
@@ -53,7 +62,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
         await register(form.username, form.email, form.password, avatarFile);
         toast.success('Account created! Welcome to Stickerly 🎭');
       } else {
-        await login(form.email, form.password, avatarFile);
+        await login(form.email, form.password);
         toast.success('Welcome back! 🎭');
       }
       navigate('/dashboard');
@@ -94,66 +103,80 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Profile Photo Option (in both login and register) */}
-            <div className="flex flex-col items-center justify-center p-4 bg-gray-50 border border-gray-100 rounded-2xl">
+            {/* Profile Photo — MANDATORY for register only */}
+            {isRegister && (
               <div
-                className="relative group cursor-pointer"
-                onClick={() => fileInputRef.current?.click()}
-                title="Click to select profile photo"
+                className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
+                  !avatarFile
+                    ? 'bg-red-50 border-red-300 border-dashed'
+                    : avatarPreview
+                    ? 'bg-green-50 border-green-300'
+                    : 'bg-gray-50 border-gray-200 border-dashed'
+                }`}
               >
-                <div className="w-20 h-20 rounded-full overflow-hidden bg-white border-2 border-dashed border-gray-300 group-hover:border-brand-pink flex items-center justify-center shadow-sm transition">
-                  {avatarPreview ? (
-                    <img
-                      src={avatarPreview}
-                      alt="Avatar Preview"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-brand-pink transition">
-                      <Camera className="w-6 h-6 mb-1 text-gray-400 group-hover:text-brand-pink" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-brand-pink">
-                        Add Photo
-                      </span>
-                    </div>
-                  )}
+                <div
+                  className="relative group cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Click to select profile photo"
+                >
+                  <div
+                    className={`w-20 h-20 rounded-full overflow-hidden border-2 flex items-center justify-center shadow-sm transition ${
+                      avatarPreview
+                        ? 'border-green-400 bg-white'
+                        : 'border-dashed border-red-300 bg-red-50 group-hover:border-red-500'
+                    }`}
+                  >
+                    {avatarPreview ? (
+                      <img
+                        src={avatarPreview}
+                        alt="Avatar Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-gray-400 group-hover:text-brand-pink transition">
+                        <Camera className="w-6 h-6 mb-1" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">
+                          Required
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className={`absolute -bottom-1 -right-1 p-1.5 text-white rounded-full shadow-md group-hover:scale-110 transition ${avatarPreview ? 'bg-green-500' : 'bg-brand-pink'}`}>
+                    <Camera className="w-3.5 h-3.5" />
+                  </div>
                 </div>
-                <div className="absolute -bottom-1 -right-1 p-1.5 bg-brand-pink text-white rounded-full shadow-md group-hover:scale-110 transition">
-                  <Camera className="w-3.5 h-3.5" />
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+
+                <div className="mt-2 text-center">
+                  <span className={`text-xs font-semibold block ${!avatarFile ? 'text-red-600' : 'text-gray-700'}`}>
+                    📸 Profile Photo (Required)
+                  </span>
+                  <div className="text-[11px] text-gray-400 mt-0.5">
+                    {avatarPreview ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveAvatar();
+                        }}
+                        className="text-red-500 font-semibold hover:underline inline-flex items-center gap-1"
+                      >
+                        <X className="w-3 h-3" /> Remove photo
+                      </button>
+                    ) : (
+                      <span className="text-red-500 font-medium">Required — your friends need to recognize you!</span>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                className="hidden"
-                onChange={handleAvatarChange}
-              />
-
-              <div className="mt-2 text-center">
-                <span className="text-xs font-semibold text-gray-700 block">
-                  {isRegister ? 'Profile Photo (Optional)' : 'Profile Photo (Optional)'}
-                </span>
-                <div className="text-[11px] text-gray-400 mt-0.5">
-                  {avatarPreview ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveAvatar();
-                      }}
-                      className="text-red-500 font-semibold hover:underline inline-flex items-center gap-1"
-                    >
-                      <X className="w-3 h-3" /> Remove photo
-                    </button>
-                  ) : isRegister ? (
-                    'Add a photo so your friends recognize you'
-                  ) : (
-                    'Upload a photo to update your avatar'
-                  )}
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Username (register only) */}
             {isRegister && (
@@ -244,16 +267,22 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (isRegister && !avatarFile)}
               className="w-full py-3.5 bg-brand-dark text-white font-semibold rounded-xl hover:bg-gray-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-md"
             >
-              {loading ? 'Please wait…' : isRegister ? 'Create Account' : 'Sign In'}
+              {loading
+                ? 'Please wait…'
+                : isRegister
+                ? avatarFile
+                  ? 'Create Account'
+                  : '📸 Add a photo first'
+                : 'Sign In'}
             </button>
           </form>
 
           {/* Toggle */}
           <p className="text-center text-sm text-gray-500 mt-6">
-            {isRegister ? 'Already have an account?' : "Need an account?"}{' '}
+            {isRegister ? 'Already have an account?' : 'Need an account?'}{' '}
             <button
               onClick={() => {
                 setMode(isRegister ? 'login' : 'register');
