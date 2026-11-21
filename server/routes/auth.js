@@ -55,13 +55,19 @@ router.post(
     try {
       const { username, email, password } = req.body;
 
+      // ── MANDATORY PROFILE PHOTO ──────────────────────────────────────────
+      const avatar = resolveAvatarUrl(req);
+      if (!avatar) {
+        return res.status(400).json({ message: 'Profile photo is required to create an account' });
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       const existingUser = await User.findOne({ $or: [{ email }, { username }] });
       if (existingUser) {
         return res.status(409).json({ message: 'Username or email already in use' });
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      const avatar = resolveAvatarUrl(req) || '';
       const user = await User.create({ username, email, passwordHash, avatar });
 
       const token = generateToken(user._id);

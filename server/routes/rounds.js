@@ -3,10 +3,10 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const Room = require('../models/Room');
 const Round = require('../models/Round');
-<<<<<<< HEAD
 const Sticker = require('../models/Sticker');
 const Vote = require('../models/Vote');
 const User = require('../models/User');
+const { completeRound, syncRoundStatus } = require('../services/roundService');
 
 // ─── Challenge generation helpers ───────────────────────────────────────────
 
@@ -42,7 +42,6 @@ const TWO_PEOPLE_POSES = [
 
 function generateChallenges(adminTopic) {
   const cleanTopic = (adminTopic || 'life & fun').trim();
-  // Shuffle templates to randomize which get picked
   const shuffledConvos = [...TOPIC_QUESTIONS].sort(() => Math.random() - 0.5);
   const shuffledPoses = [...TWO_PEOPLE_POSES].sort(() => Math.random() - 0.5);
 
@@ -54,67 +53,7 @@ function generateChallenges(adminTopic) {
   }));
 }
 
-// ─── Complete round helper ───────────────────────────────────────────────────
-
-async function completeRound(roundId, io) {
-  const round = await Round.findById(roundId);
-  if (!round || round.status === 'completed') return round;
-
-  const votes = await Vote.find({ roundId: round._id });
-  const pointsMap = {};
-
-  for (const vote of votes) {
-    for (const entry of vote.ballot) {
-      const sid = entry.stickerId.toString();
-      if (!pointsMap[sid]) {
-        pointsMap[sid] = { first: 0, second: 0, third: 0, total: 0 };
-      }
-      if (entry.rank === 1) { pointsMap[sid].first += 1; pointsMap[sid].total += 5; }
-      else if (entry.rank === 2) { pointsMap[sid].second += 1; pointsMap[sid].total += 3; }
-      else if (entry.rank === 3) { pointsMap[sid].third += 1; pointsMap[sid].total += 1; }
-    }
-  }
-
-  const stickers = await Sticker.find({ roundId: round._id });
-  const sortedStickers = stickers
-    .map((s) => {
-      const pts = pointsMap[s._id.toString()] || { first: 0, second: 0, third: 0, total: 0 };
-      return { sticker: s, ...pts };
-    })
-    .sort((a, b) => b.total - a.total);
-
-  for (let i = 0; i < sortedStickers.length; i++) {
-    const { sticker, first, second, third, total } = sortedStickers[i];
-    const finalRank = i + 1;
-    const pointsAwarded = total + 2; // +2 submission bonus
-    await Sticker.findByIdAndUpdate(sticker._id, {
-      firstPlaceVotes: first, secondPlaceVotes: second, thirdPlaceVotes: third,
-      totalPoints: total, finalRank,
-    });
-    await User.findByIdAndUpdate(sticker.creatorId, {
-      $inc: { totalPoints: pointsAwarded, ...(finalRank <= 3 ? { podiums: 1 } : {}) },
-    });
-  }
-
-  round.status = 'completed';
-  await round.save();
-
-  if (io) {
-    io.to(round.roomId.toString()).emit('round-results', { roundId: round._id, roomId: round.roomId });
-    io.to(round.roomId.toString()).emit('phase-change', { phase: 'completed' });
-  }
-
-  return round;
-}
-
 // ─── Routes ─────────────────────────────────────────────────────────────────
-=======
-const {
-  syncRoundStatus,
-  completeRound,
-  createRoundForRoom,
-} = require('../services/roundService');
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
 
 // GET /api/rounds/:roomId/current
 router.get('/:roomId/current', auth, async (req, res) => {
@@ -123,17 +62,7 @@ router.get('/:roomId/current', auth, async (req, res) => {
     if (!room) return res.status(404).json({ message: 'Room not found' });
     if (!room.currentRoundId) return res.status(404).json({ message: 'No active round' });
 
-<<<<<<< HEAD
     const round = await Round.findById(room.currentRoundId).populate('targetUserId', 'username avatar');
-=======
-    const io = req.app.get('io');
-    await syncRoundStatus(room.currentRoundId, io);
-
-    const round = await Round.findById(room.currentRoundId).populate(
-      'targetUserId',
-      'username avatar'
-    );
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     if (!round) return res.status(404).json({ message: 'Round not found' });
 
     res.json(round);
@@ -164,7 +93,6 @@ router.get('/:roomId/history', auth, async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
 // POST /api/rounds/:roomId/start-event
 // Admin starts the event — creates a new round and opens uploads
 router.post('/:roomId/start-event', auth, async (req, res) => {
@@ -189,20 +117,30 @@ router.post('/:roomId/start-event', auth, async (req, res) => {
     }
 
     const roundNumber = (room.totalRounds || 0) + 1;
+    const mode = room.mode || 'stickerly';
+
     let roundData = {
       roomId: room._id,
-      mode: room.mode || 'stickerly',
+      mode,
       roundNumber,
       status: 'uploads_open',
       participantCount: room.members.length,
       huntStart: new Date(),
     };
 
-    if (room.mode === 'challenges') {
+    if (mode === 'challenges') {
       const { topic } = req.body;
       if (!topic || !topic.trim()) {
         return res.status(400).json({ message: 'Please provide a topic for the challenges' });
       }
+
+      // ── RANDOMLY SELECT TARGET from group members ─────────────────────
+      const eligibleMembers = room.members;
+      const randomTarget = eligibleMembers[Math.floor(Math.random() * eligibleMembers.length)];
+      roundData.targetUserId = randomTarget._id;
+      await User.findByIdAndUpdate(randomTarget._id, { $inc: { timesTargeted: 1 } });
+      // ───────────────────────────────────────────────────────────────────
+
       roundData.adminTopic = topic.trim();
       roundData.challenges = generateChallenges(topic.trim());
       roundData.theme = `Challenges: ${topic.trim()}`;
@@ -224,30 +162,16 @@ router.post('/:roomId/start-event', auth, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.to(req.params.roomId).emit('phase-change', { phase: 'uploads_open' });
+      io.to(req.params.roomId).emit('phase-change', { phase: 'uploads_open', round });
     }
 
-    res.status(201).json(round);
-=======
-// POST /api/rounds/:roomId/start - manual / round start
-router.post('/:roomId/start', auth, async (req, res) => {
-  try {
-    const round = await createRoundForRoom(req.params.roomId);
     const populated = await Round.findById(round._id).populate('targetUserId', 'username avatar');
-
-    const io = req.app.get('io');
-    if (io) {
-      io.to(req.params.roomId).emit('phase-change', { phase: 'hunt' });
-    }
-
     res.status(201).json(populated);
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
   } catch (err) {
-    res.status(400).json({ message: err.message || 'Server error' });
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
-<<<<<<< HEAD
 // POST /api/rounds/:roomId/close-uploads
 // Admin closes upload phase → opens voting
 router.post('/:roomId/close-uploads', auth, async (req, res) => {
@@ -307,35 +231,6 @@ router.post('/:roomId/close-voting', auth, async (req, res) => {
     const completed = await completeRound(round._id, io);
 
     res.json({ message: 'Voting closed! Check the leaderboard.', round: completed });
-=======
-// POST /api/rounds/:roomId/advance - test helper to advance phase
-router.post('/:roomId/advance', auth, async (req, res) => {
-  try {
-    const room = await Room.findById(req.params.roomId);
-    if (!room || !room.currentRoundId) {
-      return res.status(404).json({ message: 'No active round found' });
-    }
-
-    const round = await Round.findById(room.currentRoundId);
-    if (!round) return res.status(404).json({ message: 'Round not found' });
-
-    const io = req.app.get('io');
-
-    if (round.status === 'hunt') {
-      round.status = 'voting';
-      round.votingStart = new Date();
-      await round.save();
-      if (io) io.to(room._id.toString()).emit('phase-change', { phase: 'voting' });
-      return res.json({ message: 'Advanced to voting phase', round });
-    }
-
-    if (round.status === 'voting') {
-      const completed = await completeRound(round._id, io);
-      return res.json({ message: 'Round completed and tallied', round: completed });
-    }
-
-    res.json({ message: 'Round is already completed', round });
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

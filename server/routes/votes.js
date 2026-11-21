@@ -5,21 +5,14 @@ const Vote = require('../models/Vote');
 const Round = require('../models/Round');
 const Room = require('../models/Room');
 const Sticker = require('../models/Sticker');
-const { syncRoundStatus } = require('../services/roundService');
 
 // POST /api/votes/submit
 router.post('/submit', auth, async (req, res) => {
   try {
     const { roundId, roomId, ballot } = req.body;
 
-    const io = req.app.get('io');
-<<<<<<< HEAD
     let round = await Round.findById(roundId);
     if (!round || round.status !== 'voting_open') {
-=======
-    let round = await syncRoundStatus(roundId, io);
-    if (!round || round.status !== 'voting') {
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
       return res.status(400).json({ message: 'Round is not in voting phase' });
     }
 
@@ -84,12 +77,6 @@ router.post('/submit', auth, async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-<<<<<<< HEAD
-=======
-    // Sync round status: if all eligible people have voted, voting round ends immediately
-    round = await syncRoundStatus(round._id, io);
-
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     res.json({ ...vote.toObject(), roundStatus: round.status });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

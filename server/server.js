@@ -1,5 +1,6 @@
-require('dotenv').config();
 const path = require('path');
+require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -11,6 +12,7 @@ const roomRoutes = require('./routes/rooms');
 const roundRoutes = require('./routes/rounds');
 const stickerRoutes = require('./routes/stickers');
 const voteRoutes = require('./routes/votes');
+const findClickRoutes = require('./routes/findclick');
 const socketHandler = require('./socket/index');
 
 const app = express();
@@ -40,6 +42,7 @@ app.use('/api/rooms', roomRoutes);
 app.use('/api/rounds', roundRoutes);
 app.use('/api/stickers', stickerRoutes);
 app.use('/api/votes', voteRoutes);
+app.use('/api/findclick', findClickRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
@@ -52,6 +55,15 @@ require('./jobs/scheduler')(io);
 
 // Connect to MongoDB and start server
 const PORT = process.env.PORT || 5000;
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use.`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
+});
 
 mongoose
   .connect(process.env.MONGO_URI)

@@ -5,7 +5,8 @@ const userSchema = new mongoose.Schema(
     username: { type: String, required: true, unique: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
-    avatar: { type: String, default: '' },
+    // Profile photo — MANDATORY. Stored as URL.
+    avatar: { type: String, required: true, default: '' },
     totalPoints: { type: Number, default: 0 },
     podiums: { type: Number, default: 0 },
     streak: { type: Number, default: 0 },

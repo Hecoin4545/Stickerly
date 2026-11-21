@@ -8,11 +8,16 @@ const stickerSchema = new mongoose.Schema(
     imageUrl: { type: String, required: true },
     publicId: { type: String, required: true },
     title: { type: String, default: '' },
-<<<<<<< HEAD
-    // For challenges mode: which challenge this photo completes (null = stickerly mode)
+
+    // For challenges mode: which challenge card this photo completes (null = stickerly mode)
     challengeIndex: { type: Number, default: null },
-=======
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
+
+    // AI Verification results
+    faceVerified: { type: Boolean, default: null },        // null = not checked, true/false = result
+    gestureVerified: { type: Boolean, default: null },
+    verificationReason: { type: String, default: '' },
+    verificationConfidence: { type: Number, default: 0 },
+
     uploadedAt: { type: Date, default: Date.now },
     firstPlaceVotes: { type: Number, default: 0 },
     secondPlaceVotes: { type: Number, default: 0 },

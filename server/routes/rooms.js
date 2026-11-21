@@ -32,17 +32,11 @@ router.get('/my', auth, async (req, res) => {
 // POST /api/rooms/create
 router.post('/create', auth, async (req, res) => {
   try {
-<<<<<<< HEAD
     const { name, mode } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ message: 'Room name required' });
 
-    const roomMode = ['stickerly', 'challenges'].includes(mode) ? mode : 'stickerly';
+    const roomMode = ['stickerly', 'challenges', 'findclick'].includes(mode) ? mode : 'stickerly';
 
-=======
-    const { name } = req.body;
-    if (!name || !name.trim()) return res.status(400).json({ message: 'Room name required' });
-
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     let code;
     let exists = true;
     while (exists) {
@@ -55,10 +49,7 @@ router.post('/create', auth, async (req, res) => {
       code,
       adminId: req.user._id,
       members: [req.user._id],
-<<<<<<< HEAD
       mode: roomMode,
-=======
->>>>>>> 14a570bf930b6710cbade25b5a2454cb15847d82
     });
 
     await User.findByIdAndUpdate(req.user._id, { $addToSet: { roomIds: room._id } });
