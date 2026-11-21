@@ -223,10 +223,8 @@ export default function RoomPage() {
   });
   const maxPlaces = Math.min(3, Math.max(1, votableStickers.length));
 
-  const isBallotValid =
-    maxPlaces === 1 ? Boolean(ballot[1])
-    : maxPlaces === 2 ? Boolean(ballot[1] && ballot[2])
-    : Boolean(ballot[1] && ballot[2] && ballot[3]);
+  // User must rank at least 1st place; they may optionally add more ranks up to maxPlaces
+  const isBallotValid = Boolean(ballot[1]);
 
   const myLeaderboardEntry = leaderboard.find(
     (m) => m._id === user?._id || m.username === user?.username
@@ -316,7 +314,7 @@ export default function RoomPage() {
       await api.post('/stickers/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      toast.success('Sticker verified by AI & uploaded! 🎯');
+      toast.success('Sticker uploaded! 🎯');
       setUploadFile(null);
       setUploadPreview(null);
       setStickerTitle('');
@@ -326,6 +324,19 @@ export default function RoomPage() {
       toast.error(err.response?.data?.message || 'Upload failed');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // ── Stickerly: Delete Sticker ─────────────────────────────────────────────
+  const handleDeleteSticker = async (stickerId) => {
+    if (!window.confirm('Delete this sticker?')) return;
+    try {
+      await api.delete(`/stickers/${stickerId}`);
+      toast.success('Sticker deleted');
+      if (round?._id) loadStickers(round._id);
+      loadRound();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete sticker');
     }
   };
 
@@ -397,9 +408,11 @@ export default function RoomPage() {
       return;
     }
     const formatted = [];
-    if (ballot[1]) formatted.push({ stickerId: ballot[1], rank: 1 });
-    if (ballot[2] && maxPlaces >= 2) formatted.push({ stickerId: ballot[2], rank: 2 });
-    if (ballot[3] && maxPlaces >= 3) formatted.push({ stickerId: ballot[3], rank: 3 });
+    // Only include ranks the user actually filled in (re-rank consecutively)
+    let rankCounter = 1;
+    if (ballot[1]) formatted.push({ stickerId: ballot[1], rank: rankCounter++ });
+    if (ballot[2] && maxPlaces >= 2 && ballot[2]) formatted.push({ stickerId: ballot[2], rank: rankCounter++ });
+    if (ballot[3] && maxPlaces >= 3 && ballot[3]) formatted.push({ stickerId: ballot[3], rank: rankCounter++ });
 
     try {
       setActionLoading(true);
@@ -673,13 +686,13 @@ export default function RoomPage() {
               </div>
             )}
 
-            {/* ── AI Verification Banner (Active Event) ── */}
-            {round?.status === 'uploads_open' && (
+            {/* ── AI Verification Banner (Challenges mode only) ── */}
+            {round?.status === 'uploads_open' && roomMode === 'challenges' && (
               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3 text-xs text-blue-800">
                 <Sparkles className="w-5 h-5 text-blue-600 flex-shrink-0" />
                 <div>
-                  <span className="font-bold">AI Photo & Gesture Verification Active: </span>
-                  When you upload, Google Gemini AI verifies that your face matches your profile photo, and for challenges, checks that you completed the requested pose.
+                  <span className="font-bold">AI Pose & Gesture Verification Active: </span>
+                  When you upload a challenge photo, Google Gemini AI checks that you completed the requested pose.
                 </div>
               </div>
             )}
@@ -697,7 +710,7 @@ export default function RoomPage() {
                     </div>
                     <h2 className="text-xl font-black tracking-tight">📸 Snap & Upload Your Sticker!</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      Click fun photos and upload. AI will verify you are in the photo matching your profile!
+                      Upload as many stickers as you like for this round!
                     </p>
                     {round.theme && (
                       <div className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -730,7 +743,7 @@ export default function RoomPage() {
                         <div>
                           <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                           <p className="text-xs font-bold text-gray-700">Click to select photo</p>
-                          <p className="text-[11px] text-gray-400 mt-1">AI checks face match with your profile photo</p>
+                          <p className="text-[11px] text-gray-400 mt-1">JPG, PNG, GIF, WebP — max 25MB</p>
                         </div>
                       )}
                     </div>
@@ -749,7 +762,7 @@ export default function RoomPage() {
                           disabled={actionLoading}
                           className="w-full py-3 bg-black text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          {actionLoading ? 'AI Verifying & Uploading...' : '🎯 Upload & Verify'}
+                          {actionLoading ? 'Uploading...' : '🎯 Upload Sticker'}
                         </button>
                       </div>
                     )}
@@ -773,7 +786,17 @@ export default function RoomPage() {
                         {myStickers.map((s) => (
                           <div key={s._id} className="relative group rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
                             <img src={s.imageUrl} alt={s.title} className="w-full aspect-square object-cover" />
-                            <div className="absolute top-1 right-1 bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">✓ Verified</div>
+                            <div className="absolute top-1 left-1 bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">✓ Uploaded</div>
+                            <button
+                              onClick={() => handleDeleteSticker(s._id)}
+                              className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition hover:bg-red-600"
+                              title="Delete sticker"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                            {s.title && (
+                              <div className="bg-white/90 text-[10px] font-semibold truncate px-1.5 py-1 text-gray-700">{s.title}</div>
+                            )}
                           </div>
                         ))}
                       </div>
