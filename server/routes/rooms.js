@@ -102,21 +102,28 @@ router.get('/:roomId/leaderboard', auth, async (req, res) => {
   try {
     const room = await Room.findById(req.params.roomId).populate(
       'members',
-      'username avatar totalPoints podiums streak timesTargeted'
+      'username avatar timesTargeted'
     );
     if (!room) return res.status(404).json({ message: 'Room not found' });
 
-    const sorted = [...room.members].sort((a, b) => b.totalPoints - a.totalPoints);
-    const leaderboard = sorted.map((member, index) => ({
-      rank: index + 1,
-      _id: member._id,
-      username: member.username,
-      avatar: member.avatar,
-      totalPoints: member.totalPoints,
-      podiums: member.podiums,
-      streak: member.streak,
-      timesTargeted: member.timesTargeted,
-    }));
+    // Build per-room leaderboard using memberPoints array
+    const leaderboard = room.members.map((member) => {
+      const mp = (room.memberPoints || []).find(
+        (p) => p.userId.toString() === member._id.toString()
+      );
+      return {
+        _id: member._id,
+        username: member.username,
+        avatar: member.avatar,
+        totalPoints: mp?.points || 0,
+        podiums: mp?.podiums || 0,
+        streak: mp?.streak || 0,
+        timesTargeted: member.timesTargeted || 0,
+      };
+    });
+
+    leaderboard.sort((a, b) => b.totalPoints - a.totalPoints);
+    leaderboard.forEach((entry, i) => { entry.rank = i + 1; });
 
     res.json(leaderboard);
   } catch (err) {

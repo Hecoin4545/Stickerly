@@ -29,27 +29,29 @@ router.post('/submit', auth, async (req, res) => {
 
     const maxAllowed = Math.min(3, Math.max(1, votableCount));
 
-    if (!Array.isArray(ballot) || ballot.length === 0 || ballot.length > maxAllowed) {
+    if (!Array.isArray(ballot) || ballot.length === 0) {
       return res.status(400).json({
-        message: `Ballot must have between 1 and ${maxAllowed} entries`,
+        message: 'Ballot must have at least 1 entry',
       });
     }
 
-    if (!ballot.some((b) => b.rank === 1)) {
+    // Allow partial ballots: user can rank 1, 2, or up to maxAllowed stickers
+    // but cannot rank more than maxAllowed
+    const filteredBallot = ballot.filter((b) => b.stickerId).slice(0, maxAllowed);
+    if (filteredBallot.length === 0) {
+      return res.status(400).json({ message: 'Please rank at least one sticker' });
+    }
+
+    // Re-assign consecutive ranks based on what was submitted
+    const rerankedBallot = filteredBallot.map((b, i) => ({ ...b, rank: i + 1 }));
+
+    if (!rerankedBallot.some((b) => b.rank === 1)) {
       return res.status(400).json({ message: 'Ballot must include a 1st place selection' });
     }
 
-    const ranks = ballot.map((b) => b.rank).sort((a, b) => a - b);
-    const expectedRanks = Array.from({ length: ballot.length }, (_, i) => i + 1);
-    if (JSON.stringify(ranks) !== JSON.stringify(expectedRanks)) {
-      return res.status(400).json({
-        message: `Ballot ranks must be consecutive starting from 1 (${expectedRanks.join(', ')})`,
-      });
-    }
-
-    const stickerIds = ballot.map((b) => b.stickerId);
+    const stickerIds = rerankedBallot.map((b) => b.stickerId);
     const uniqueIds = new Set(stickerIds.map((id) => id.toString()));
-    if (uniqueIds.size !== ballot.length) {
+    if (uniqueIds.size !== rerankedBallot.length) {
       return res.status(400).json({ message: 'Cannot assign multiple ranks to the same sticker' });
     }
 
@@ -57,7 +59,7 @@ router.post('/submit', auth, async (req, res) => {
       _id: { $in: stickerIds },
       roundId,
     });
-    if (validRoundStickers !== ballot.length) {
+    if (validRoundStickers !== rerankedBallot.length) {
       return res.status(400).json({ message: 'One or more stickers do not belong to this round' });
     }
 
@@ -73,7 +75,7 @@ router.post('/submit', auth, async (req, res) => {
 
     const vote = await Vote.findOneAndUpdate(
       { roundId, voterId: req.user._id },
-      { roundId, roomId, voterId: req.user._id, ballot, submittedAt: new Date() },
+      { roundId, roomId, voterId: req.user._id, ballot: rerankedBallot, submittedAt: new Date() },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 

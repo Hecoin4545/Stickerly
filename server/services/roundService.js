@@ -97,12 +97,27 @@ async function completeRound(roundId, io) {
       finalRank,
     });
 
+    // Update global user points (kept for backward compat)
     await User.findByIdAndUpdate(sticker.creatorId, {
       $inc: { totalPoints: pointsAwarded, ...(finalRank <= 3 ? { podiums: 1 } : {}) },
     });
+
+    // Update per-room points
+    const creatorId = sticker.creatorId.toString();
+    await Room.findOneAndUpdate(
+      { _id: round.roomId, 'memberPoints.userId': sticker.creatorId },
+      { $inc: { 'memberPoints.$.points': pointsAwarded, ...(finalRank <= 3 ? { 'memberPoints.$.podiums': 1 } : {}) } }
+    );
+    // If memberPoints entry doesn't exist yet, upsert it
+    const roomCheck = await Room.findOne({ _id: round.roomId, 'memberPoints.userId': sticker.creatorId });
+    if (!roomCheck) {
+      await Room.findByIdAndUpdate(round.roomId, {
+        $push: { memberPoints: { userId: sticker.creatorId, points: pointsAwarded, podiums: finalRank <= 3 ? 1 : 0, streak: 0 } }
+      });
+    }
   }
 
-  // Update streaks
+  // Update streaks (per-room)
   for (const memberId of allMemberIds) {
     if (submitterIds.has(memberId)) {
       const user = await User.findById(memberId);
@@ -112,8 +127,24 @@ async function completeRound(roundId, io) {
         streak: newStreak,
         longestStreak: newLongest,
       });
+      // Per-room streak update
+      await Room.findOneAndUpdate(
+        { _id: round.roomId, 'memberPoints.userId': memberId },
+        { $inc: { 'memberPoints.$.streak': 1 } }
+      );
+      const roomStreakCheck = await Room.findOne({ _id: round.roomId, 'memberPoints.userId': memberId });
+      if (!roomStreakCheck) {
+        await Room.findByIdAndUpdate(round.roomId, {
+          $push: { memberPoints: { userId: memberId, points: 0, podiums: 0, streak: 1 } }
+        });
+      }
     } else {
       await User.findByIdAndUpdate(memberId, { streak: 0 });
+      // Reset per-room streak
+      await Room.findOneAndUpdate(
+        { _id: round.roomId, 'memberPoints.userId': memberId },
+        { $set: { 'memberPoints.$.streak': 0 } }
+      );
     }
   }
 

@@ -46,50 +46,48 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
       imageUrl = `${serverBase}/uploads/${req.file.filename}`;
     }
 
-    // ── AI VERIFICATION ──────────────────────────────────────────────────────
+    // ── AI VERIFICATION (challenges mode only) ────────────────────────────────
     const uploaderUser = await User.findById(req.user._id);
     let faceVerified = null;
     let gestureVerified = null;
     let verificationReason = '';
     let verificationConfidence = 0;
-
-    // 1. Face verification: does the submitted photo contain the same person as profile?
-    if (uploaderUser?.avatar && uploaderUser.avatar.trim()) {
-      const faceResult = await verifyFaceMatch(uploaderUser.avatar, imageUrl);
-      faceVerified = faceResult.passed;
-      verificationReason = faceResult.reason;
-      verificationConfidence = faceResult.confidence;
-
-      if (!faceVerified && faceResult.confidence > 60) {
-        // High confidence mismatch — block the upload
-        return res.status(400).json({
-          message: 'Photo verification failed: The person in the photo does not match your profile photo. Make sure you are in the photo!',
-          verificationResult: faceResult,
-        });
-      }
-    }
-
-    // 2. Gesture verification: for challenges mode, verify the pose
-    let poseDescription = '';
     const cIdx = challengeIndex !== undefined ? parseInt(challengeIndex) : null;
-    if (round.mode === 'challenges' && cIdx !== null && round.challenges?.length > 0) {
-      const challengeCard = round.challenges.find((c) => c.index === cIdx);
-      if (challengeCard?.poseDescription) {
-        poseDescription = challengeCard.poseDescription;
-        const gestureResult = await verifyGesture(imageUrl, poseDescription);
-        gestureVerified = gestureResult.passed;
-        if (!gestureResult.passed && gestureResult.confidence > 65) {
+
+    if (round.mode === 'challenges') {
+      // 1. Face verification for challenges
+      if (uploaderUser?.avatar && uploaderUser.avatar.trim()) {
+        const faceResult = await verifyFaceMatch(uploaderUser.avatar, imageUrl);
+        faceVerified = faceResult.passed;
+        verificationReason = faceResult.reason;
+        verificationConfidence = faceResult.confidence;
+
+        if (!faceVerified && faceResult.confidence > 60) {
           return res.status(400).json({
-            message: `Pose verification failed: ${gestureResult.reason}. Please try the pose again!`,
-            verificationResult: gestureResult,
+            message: 'Photo verification failed: The person in the photo does not match your profile photo. Make sure you are in the photo!',
+            verificationResult: faceResult,
           });
         }
-        // Update combined reason
-        verificationReason = gestureResult.reason;
-        verificationConfidence = Math.min(verificationConfidence || 100, gestureResult.confidence);
+      }
+
+      // 2. Gesture verification for challenges
+      if (cIdx !== null && round.challenges?.length > 0) {
+        const challengeCard = round.challenges.find((c) => c.index === cIdx);
+        if (challengeCard?.poseDescription) {
+          const gestureResult = await verifyGesture(imageUrl, challengeCard.poseDescription);
+          gestureVerified = gestureResult.passed;
+          if (!gestureResult.passed && gestureResult.confidence > 65) {
+            return res.status(400).json({
+              message: `Pose verification failed: ${gestureResult.reason}. Please try the pose again!`,
+              verificationResult: gestureResult,
+            });
+          }
+          verificationReason = gestureResult.reason;
+          verificationConfidence = Math.min(verificationConfidence || 100, gestureResult.confidence);
+        }
       }
     }
-    // ────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
 
     // For challenges mode: check if already submitted for this challenge
     if (round.mode === 'challenges' && cIdx !== null) {
@@ -117,13 +115,8 @@ router.post('/upload', auth, upload.single('image'), async (req, res) => {
 
         return res.status(200).json({ ...existing.toObject(), roundStatus: round.status });
       }
-    } else if (round.mode === 'stickerly') {
-      // Stickerly: one upload per user per round
-      const existing = await Sticker.findOne({ roundId: round._id, creatorId: req.user._id, challengeIndex: null });
-      if (existing) {
-        return res.status(409).json({ message: 'Already uploaded a sticker this round' });
-      }
     }
+    // Stickerly mode: allow multiple uploads per user per round
 
     const stickerData = {
       roundId: round._id,
